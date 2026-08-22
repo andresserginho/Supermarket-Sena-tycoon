@@ -2,12 +2,12 @@ import React, { Suspense } from 'react';
 import { useGLTF } from '@react-three/drei';
 import { CarTraffic } from './CarTraffic';
 import { SupermarketExpansions } from './SupermarketExpansions';
+import { SupermarketStructure } from './SupermarketStructure';
 
 const SUPERMARKET_CONFIG = {
   position: [-16, 0, 0] as [number, number, number],
   dimensions: { width: 14, height: 10, depth: 30 },
   colors: {
-    wall: '#1e293b',
     header: '#15803d',
     glass: '#93c5fd',
     floor: '#f8fafc',
@@ -43,7 +43,7 @@ export const SupermarketEnvironment: React.FC<SupermarketEnvironmentProps> = ({
   level = 1, 
   onPlayerHit 
 }) => {
-  const { position, dimensions, colors } = SUPERMARKET_CONFIG;
+  const { position } = SUPERMARKET_CONFIG;
 
   const buildingsData = [
     // --- ACERA DERECHA (X Positiva) ---
@@ -98,37 +98,20 @@ export const SupermarketEnvironment: React.FC<SupermarketEnvironmentProps> = ({
       </group>
 
       {/* 2. ACERAS / ANDENES */}
-      <mesh position={[-13.89, 0.08, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[18, 180]} />
+      <mesh position={[-14.90, 0.08, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow> {/*-13.89 . 0. 08 .  0*/}
+        <planeGeometry args={[20, 180]} />
         <meshStandardMaterial color="#cbd5e1" roughness={0.6} />
       </mesh>
-      <mesh position={[15.46, 0.08, 4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[21, 180]} />
+      <mesh position={[15.85, 0.08, 4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>  {/* 15.46 . 0.08 .  4*/}
+        <planeGeometry args={[22, 180]} />
         <meshStandardMaterial color="#cbd5e1" roughness={0.6} />
       </mesh>
 
-      {/* 3. SUPERMERCADO MODULAR */}
-      <group position={position}>
-        <mesh position={[0, dimensions.height / 2, 0]}>
-          <boxGeometry args={[dimensions.width, dimensions.height, dimensions.depth]} />
-          <meshStandardMaterial color={colors.wall} />
-        </mesh>
-
-        <mesh position={[dimensions.width / 2 - 0.1, dimensions.height - 1.5, 0]} rotation={[0, Math.PI / 2, 0]}>
-          <planeGeometry args={[dimensions.depth - 4, 2.5]} />
-          <meshStandardMaterial color={colors.header} />
-        </mesh>
-
-        <mesh position={[dimensions.width / 2 - 0.1, 3, 0]} rotation={[0, Math.PI / 2, 0]}>
-          <planeGeometry args={[dimensions.depth - 4, 4]} />
-          <meshPhysicalMaterial color={colors.glass} transmission={0.7} opacity={0.8} transparent roughness={0.1} />
-        </mesh>
-
-        <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[dimensions.width - 1, dimensions.depth - 1]} />
-          <meshStandardMaterial color={colors.floor} roughness={0.2} />
-        </mesh>
-      </group>
+      {/* 3. SUPERMERCADO MODULAR (Reemplaza la caja negra por los modelos de Blender) */}
+      <SupermarketStructure 
+        position={position} 
+        unlockedZones={1} 
+      />
 
       {/* 4. RENDERIZADO DE EDIFICIOS */}
       <Suspense fallback={null}>
@@ -144,11 +127,11 @@ export const SupermarketEnvironment: React.FC<SupermarketEnvironmentProps> = ({
       </Suspense>
 
       {/* 5. MUROS LÍMITE */}
-      <mesh position={[26.20, 2.5, 0]}>
+      <mesh position={[26.20, 2.5, 0]}> {/*26.20*/}
         <boxGeometry args={[0.5, 5, 180]} />
         <meshStandardMaterial color="#475569" roughness={0.7} />
       </mesh>
-      <mesh position={[-23, 2.5, 0]}>
+      <mesh position={[-24, 2.5, 0]}>
         <boxGeometry args={[0.5, 5, 180]} />
         <meshStandardMaterial color="#475569" roughness={0.7} />
       </mesh>
