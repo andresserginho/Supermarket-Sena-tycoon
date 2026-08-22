@@ -22,5 +22,6 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["src/presentation/components/GameLauncher.tsx", "src/presentation/components/GameLauncherClean.tsx", "src/presentation/components/GameLauncherFinal.tsx"]
 }

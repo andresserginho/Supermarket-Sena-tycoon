@@ -1,4 +1,115 @@
-import React, { useState, useEffect } from 'react';
+/// <reference types="vite/client" />
+import { useState } from 'react';
+import { useProgress } from '@react-three/drei';
+import { ArrowRight, KeyRound, LogIn, UserPlus, Users } from 'lucide-react';
+
+export interface GameUser { name: string; ficha: string; gender: 'masculino' | 'femenino'; roomCode: string; sessionId: string; }
+interface GameLauncherProps { onStartGame: (user: GameUser) => void; }
+type Mode = 'apprentice' | 'instructor';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+
+async function request<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message ?? 'No se pudo completar la solicitud.');
+  return data as T;
+}
+
+export function GameLauncher({ onStartGame }: GameLauncherProps) {
+  const { progress } = useProgress();
+  const [mode, setMode] = useState<Mode>('apprentice');
+  const [isRegister, setIsRegister] = useState(true);
+  const [name, setName] = useState(''); const [ficha, setFicha] = useState('');
+  const [gender, setGender] = useState<'masculino' | 'femenino'>('masculino'); const [email, setEmail] = useState('');
+  const [password, setPassword] = useState(''); const [roomCode, setRoomCode] = useState('');
+  const [roomName, setRoomName] = useState('Sala de entrenamiento'); const [generatedCode, setGeneratedCode] = useState('');
+  const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+
+  const submitApprentice = async (event: React.FormEvent) => {
+    event.preventDefault(); setError(''); setBusy(true);
+    try {
+      const user = isRegister ? await request<GameUser>('/auth/apprentice/register', { name, ficha, gender, password, roomCode }) : await request<GameUser>('/auth/apprentice/login', { ficha, password, roomCode });
+      localStorage.setItem('sena_current_user', JSON.stringify(user)); onStartGame(user);
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'No se pudo iniciar.'); } finally { setBusy(false); }
+  };
+
+  const submitInstructor = async (event: React.FormEvent) => {
+    event.preventDefault(); setError(''); setBusy(true);
+    try {
+      const instructorKey = isRegister ? window.prompt('Escribe la clave privada de registro de instructor') ?? '' : '';
+      const instructor = isRegister ? await request<{ id: string }>('/auth/instructor/register', { name, email, password, instructorKey }) : await request<{ id: string }>('/auth/instructor/login', { email, password });
+      const room = await request<{ code: string }>('/rooms', { instructorId: instructor.id, name: roomName }); setGeneratedCode(room.code);
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'No se pudo crear la sala.'); } finally { setBusy(false); }
+  };
+
+  const loaded = progress >= 100 || progress === 0;
+  return <main className="launcher">
+    <section className="launcher__brand"><div className="brand-mark">🛒</div><p className="eyebrow">SENA PRESENTA</p><h1>SUPERMARKET<br /><strong>SENA</strong></h1><p className="brand-subtitle">TYCOON</p><p className="brand-copy">Construye. Administra. Expande.<br />Tu imperio empieza aquí.</p><div className="store-photo" /><div className="loading"><span>CARGANDO RECURSOS...</span><b>{Math.round(progress)}%</b><div><i style={{ width: `${Math.max(progress, 5)}%` }} /></div><small>Edificios, texturas, modelos 3D, personajes, audio...</small></div></section>
+    <section className="access-panel"><div className="role-tabs"><button type="button" className={mode === 'apprentice' ? 'active' : ''} onClick={() => setMode('apprentice')}><Users size={18} /> APRENDIZ</button><button type="button" className={mode === 'instructor' ? 'active' : ''} onClick={() => setMode('instructor')}><KeyRound size={18} /> INSTRUCTOR</button></div>
+      {generatedCode ? <div className="room-result"><span>CÓDIGO DE SALA</span><strong>{generatedCode}</strong><p>Comparte este código con todos los aprendices. Cada uno tendrá su propia sala.</p><button className="primary" onClick={() => navigator.clipboard?.writeText(generatedCode)}>COPIAR CÓDIGO</button></div> : <><div className="panel-heading"><div className="heading-icon">{mode === 'apprentice' ? <Users /> : <KeyRound />}</div><div><h2>{mode === 'apprentice' ? (isRegister ? 'NUEVO APRENDIZ' : 'APRENDIZ EXISTENTE') : (isRegister ? 'REGISTRAR INSTRUCTOR' : 'LOGIN INSTRUCTOR')}</h2><p>{mode === 'apprentice' ? 'Entra con el código entregado por tu instructor.' : 'Crea un código para tu grupo.'}</p></div></div><form onSubmit={mode === 'apprentice' ? submitApprentice : submitInstructor}>
+        {isRegister && <label>{mode === 'apprentice' ? 'NOMBRE DEL APRENDIZ' : 'NOMBRE DEL INSTRUCTOR'}<input value={name} onChange={event => setName(event.target.value)} required /></label>}
+        {mode === 'instructor' && <label>CORREO INSTITUCIONAL<input type="email" value={email} onChange={event => setEmail(event.target.value)} required /></label>}
+        {mode === 'apprentice' && <label>NÚMERO DE FICHA<input value={ficha} onChange={event => setFicha(event.target.value)} inputMode="numeric" required /></label>}
+        <label>CONTRASEÑA<input type="password" value={password} onChange={event => setPassword(event.target.value)} minLength={6} required /></label>
+        {mode === 'instructor' && isRegister && <label>NOMBRE DE LA SALA<input value={roomName} onChange={event => setRoomName(event.target.value)} required /></label>}
+        {mode === 'apprentice' && <><label>CÓDIGO DE SALA<input className="code-input" value={roomCode} onChange={event => setRoomCode(event.target.value.toUpperCase())} maxLength={8} required /></label>{isRegister && <div className="gender"><span>AVATAR</span><button type="button" className={gender === 'masculino' ? 'selected' : ''} onClick={() => setGender('masculino')}>MASCULINO</button><button type="button" className={gender === 'femenino' ? 'selected' : ''} onClick={() => setGender('femenino')}>FEMENINO</button></div>}</>}
+        {error && <p className="form-error">{error}</p>}<button className="primary" disabled={!loaded || busy}>{busy ? 'CONECTANDO...' : mode === 'instructor' ? 'CREAR SALA' : 'ENTRAR A MI SALA'} <ArrowRight size={20} /></button></form><button className="switch" onClick={() => setIsRegister(value => !value)}>{isRegister ? <><LogIn size={16} /> Ya tengo una cuenta</> : <><UserPlus size={16} /> Crear una cuenta nueva</>}</button></>}
+    </section>
+  </main>;
+}
+/*
+import { useProgress } from '@react-three/drei';
+import { ArrowRight, KeyRound, LogIn, UserPlus, Users, X } from 'lucide-react';
+
+export interface GameUser { name: string; ficha: string; gender: 'male' | 'female'; roomCode: string; sessionId: string; }
+interface GameLauncherProps { onStartGame: (user: GameUser) => void; }
+type Mode = 'apprentice' | 'instructor';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+
+async function request<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message ?? 'No se pudo completar la solicitud.');
+  return data as T;
+}
+
+export function GameLauncher({ onStartGame }: GameLauncherProps) {
+  const { progress } = useProgress();
+  const [mode, setMode] = useState<Mode>('apprentice');
+  const [isRegister, setIsRegister] = useState(true);
+  const [name, setName] = useState(''); const [ficha, setFicha] = useState('');
+  const [gender, setGender] = useState<'masculino' | 'femenino'>('masculino'); const [email, setEmail] = useState('');
+  const [password, setPassword] = useState(''); const [roomCode, setRoomCode] = useState('');
+    const [roomName, setRoomName] = useState('Sala de entrenamiento'); const [instructorKey, setInstructorKey] = useState(''); const [generatedCode, setGeneratedCode] = useState('');
+  const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  useEffect(() => { setError(''); setGeneratedCode(''); }, [mode, isRegister]);
+
+  const submitApprentice = async (event: React.FormEvent) => {
+    event.preventDefault(); setError(''); setBusy(true);
+    try {
+      const user = isRegister ? await request<GameUser>('/auth/apprentice/register', { name, ficha, gender, password, roomCode }) : await request<GameUser>('/auth/apprentice/login', { ficha, password, roomCode });
+      localStorage.setItem('sena_current_user', JSON.stringify(user)); onStartGame(user);
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'No se pudo iniciar.'); } finally { setBusy(false); }
+  };
+
+  const submitInstructor = async (event: React.FormEvent) => {
+    event.preventDefault(); setError(''); setBusy(true);
+    try {
+      const registrationKey = isRegister ? window.prompt('Escribe la clave privada de registro de instructor') ?? '' : '';
+      const instructor = isRegister ? await request<{ id: string }>('/auth/instructor/register', { name, email, password, instructorKey: registrationKey }) : await request<{ id: string }>('/auth/instructor/login', { email, password });
+      const room = await request<{ code: string }>('/rooms', { instructorId: instructor.id, name: roomName }); setGeneratedCode(room.code);
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'No se pudo crear la sala.'); } finally { setBusy(false); }
+  }; --
+  <form onSubmit={mode === 'apprentice' ? submitApprentice : submitInstructor}>{isRegister && <label>{mode === 'apprentice' ? 'NOMBRE DEL APRENDIZ' : 'NOMBRE DEL INSTRUCTOR'}<input value={name} onChange={e => setName(e.target.value)} placeholder="Escribe tu nombre" required /></label>}{mode === 'instructor' && <label>CORREO INSTITUCIONAL<input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="instructor@sena.edu.co" required /></label>}{mode === 'apprentice' && <label>NÚMERO DE FICHA<input value={ficha} onChange={e => setFicha(e.target.value)} placeholder="3235613" inputMode="numeric" required /></label>}<label>CONTRASEÑA<input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" minLength={6} required /></label>{mode === 'apprentice' && <><label>CÓDIGO DE SALA<input className="code-input" value={roomCode} onChange={e => setRoomCode(e.target.value.toUpperCase())} placeholder="EJ: A4F92C" maxLength={8} required /></label>{isRegister && <div className="gender"><span>AVATAR</span><button type="button" className={gender === 'male' ? 'selected' : ''} onClick={() => setGender('male')}>MASCULINO</button><button type="button" className={gender === 'female' ? 'selected' : ''} onClick={() => setGender('female')}>FEMENINO</button></div>}</>}{mode === 'instructor' && isRegister && <label>NOMBRE DE LA SALA<input value={roomName} onChange={e => setRoomName(e.target.value)} required /></label>}{error && <p className="form-error">{error}</p>}<button className="primary" disabled={!loaded || busy}>{busy ? 'CONECTANDO...' : mode === 'instructor' ? 'CREAR SALA' : (isRegister ? 'ENTRAR A LA SALA' : 'INICIAR SESIÓN')} <ArrowRight size={20} /></button></form><button className="switch" onClick={() => setIsRegister(value => !value)}>{isRegister ? <><LogIn size={16} /> Ya tengo una cuenta</> : <><UserPlus size={16} /> Crear una cuenta nueva</>}</button></>}</section>
+
+  -- const loaded = progress >= 100 || progress === 0;
+  return <main className="launcher">
+    <section className="launcher__brand"><div className="brand-mark">🛒</div><p className="eyebrow">SENA PRESENTA</p><h1>SUPERMARKET<br /><strong>SENA</strong></h1><p className="brand-subtitle">TYCOON</p><p className="brand-copy">Construye. Administra. Expande.<br />Tu imperio empieza aquí.</p><div className="store-photo" /><div className="loading"><span>CARGANDO RECURSOS...</span><b>{Math.round(progress)}%</b><div><i style={{ width: `${Math.max(progress, 5)}%` }} /></div><small>Edificios, texturas, modelos 3D, personajes, audio...</small></div></section>
+    <section className="access-panel"><div className="role-tabs"><button className={mode === 'apprentice' ? 'active' : ''} onClick={() => setMode('apprentice')}><Users size={18} /> APRENDIZ</button><button className={mode === 'instructor' ? 'active' : ''} onClick={() => setMode('instructor')}><KeyRound size={18} /> INSTRUCTOR</button></div>
+      {generatedCode ? <div className="room-result"><button className="close-result" onClick={() => setGeneratedCode('')}><X size={16} /></button><span>CÓDIGO DE SALA</span><strong>{generatedCode}</strong><p>Comparte este código con los aprendices para que puedan entrar a esta sala.</p><button className="primary" onClick={() => navigator.clipboard?.writeText(generatedCode)}>COPIAR CÓDIGO</button></div> : <><div className="panel-heading"><div className="heading-icon">{mode === 'apprentice' ? <Users /> : <KeyRound />}</div><div><h2>{mode === 'apprentice' ? (isRegister ? 'NUEVO APRENDIZ' : 'APRENDIZ EXISTENTE') : (isRegister ? 'REGISTRAR INSTRUCTOR' : 'LOGIN INSTRUCTOR')}</h2><p>{mode === 'apprentice' ? 'Entra a la sala que creó tu instructor.' : 'Crea una sala de juego para tu grupo.'}</p></div></div>
+        <form onSubmit={mode === 'apprentice' ? submitApprentice : submitInstructor}>{isRegister && <label>{mode === 'apprentice' ? 'NOMBRE DEL APRENDIZ' : 'NOMBRE DEL INSTRUCTOR'}<input value={name} onChange={e => setName(e.target.value)} placeholder="Escribe tu nombre" required /></label>}{mode === 'instructor' && <label>CORREO INSTITUCIONAL<input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="instructor@sena.edu.co" required /></label>}{mode === 'apprentice' && <label>NÚMERO DE FICHA<input value={ficha} onChange={e => setFicha(e.target.value)} placeholder="3235613" inputMode="numeric" required /></label>}<label>CONTRASEÑA<input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" minLength={6} required /></label>{mode === 'apprentice' && <><label>CÓDIGO DE SALA<input className="code-input" value={roomCode} onChange={e => setRoomCode(e.target.value.toUpperCase())} placeholder="EJ: A4F92C" maxLength={8} required /></label>{isRegister && <div className="gender"><span>AVATAR</span><button type="button" className={gender === 'male' ? 'selected' : ''} onClick={() => setGender('male')}>MASCULINO</button><button type="button" className={gender === 'female' ? 'selected' : ''} onClick={() => setGender('female')}>FEMENINO</button></div>}</>}{mode === 'instructor' && isRegister && <label>NOMBRE DE LA SALA<input value={roomName} onChange={e => setRoomName(e.target.value)} required /></label>}{error && <p className="form-error">{error}</p>}<button className="primary" disabled={!loaded || busy}>{busy ? 'CONECTANDO...' : mode === 'instructor' ? 'CREAR SALA' : (isRegister ? 'ENTRAR A LA SALA' : 'INICIAR SESIÓN')} <ArrowRight size={20} /></button></form><button className="switch" onClick={() => setIsRegister(value => !value)}>{isRegister ? <><LogIn size={16} /> Ya tengo una cuenta</> : <><UserPlus size={16} /> Crear una cuenta nueva</>}</button></>}</section>
+  </main>;
+}--import React, { useState, useEffect } from 'react';
 import { useProgress } from '@react-three/drei';
 
 interface GameLauncherProps {
@@ -85,7 +196,7 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
   return (
     <div className="fixed inset-0 z-50 min-h-screen w-full bg-[#030a06] text-white flex flex-col justify-between p-3 sm:p-5 md:p-6 overflow-y-auto font-sans box-border select-none">
       
-      {/* PESTAÑAS PARA MÓVIL (RNF-01) */}
+      {-- PESTAÑAS PARA MÓVIL (RNF-01) --}
       <div className="flex md:hidden bg-[#06150c] p-1 rounded-xl border border-emerald-900/50 mb-3 shrink-0">
         <button
           onClick={() => setActiveTabMobile('new')}
@@ -101,13 +212,13 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
         </button>
       </div>
 
-      {/* CONTENEDOR PRINCIPAL TRES COLUMNAS (RF-01 & RNF-01) */}
+      {-- CONTENEDOR PRINCIPAL TRES COLUMNAS (RF-01 & RNF-01) --}
       <div className="max-w-[1380px] w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 my-auto py-2">
         
-        {/* COLUMNA 1: BRANDING & PRECARGADOR (4 COLS) */}
+        {-- COLUMNA 1: BRANDING & PRECARGADOR (4 COLS) --}
         <div className="lg:col-span-4 flex flex-col justify-between space-y-4">
           <div>
-            {/* Header SENA */}
+            {-- Header SENA --}
             <div className="flex items-center space-x-3 mb-2">
               <div className="w-12 h-12 rounded-xl bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center shrink-0">
                 <svg width="28" height="28" className="text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -131,7 +242,7 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
               Construye. Administra. Expande. Tu imperio empieza aqui.
             </p>
 
-            {/* Banner Tienda */}
+            {-- Banner Tienda --}
             <div className="mt-4 relative rounded-2xl overflow-hidden border border-emerald-800/40 bg-slate-950 h-44 flex items-end p-4">
               <div className="absolute inset-0 bg-cover bg-center opacity-40" style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1578916171728-46686eac8d58?q=80&w=800&auto=format&fit=crop")' }}></div>
               <div className="absolute inset-0 bg-gradient-to-t from-[#030a06] via-transparent to-transparent"></div>
@@ -142,7 +253,7 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
             </div>
           </div>
 
-          {/* Precargador de Recursos (RF-03, RF-04, RF-05) */}
+          {-- Precargador de Recursos --}
           <div className="bg-[#06150c]/90 p-4 rounded-2xl border border-emerald-900/60 space-y-2">
             <div className="flex justify-between items-center text-xs font-bold text-slate-200">
               <span className="uppercase tracking-wider">CARGANDO RECURSOS...</span>
@@ -163,7 +274,7 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
           </div>
         </div>
 
-        {/* COLUMNA 2: NUEVO JUGADOR (4 COLS) */}
+        {-- COLUMNA 2: NUEVO JUGADOR --}
         <div className={`lg:col-span-4 bg-[#06150c]/80 p-6 rounded-2xl border border-emerald-500/40 flex-col justify-between backdrop-blur-md ${activeTabMobile === 'new' ? 'flex' : 'hidden md:flex'}`}>
           <div>
             <div className="flex items-center space-x-2 text-emerald-400 mb-1">
@@ -207,11 +318,11 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
                 </div>
               </div>
 
-              {/* Selección de Avatar (RF-02) */}
+              {-- Selección de Avatar --}
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 uppercase mb-2">SELECCIONA TU AVATAR</label>
                 <div className="grid grid-cols-2 gap-3">
-                  {/* Avatar Masculino */}
+                  {-- Avatar Masculino --}
                   <button
                     type="button"
                     onClick={() => setGender('male')}
@@ -228,7 +339,7 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
                     <span className="text-[10px] font-extrabold tracking-wider uppercase">AVATAR MASCULINO</span>
                   </button>
 
-                  {/* Avatar Femenino */}
+                  {-- Avatar Femenino --}
                   <button
                     type="button"
                     onClick={() => setGender('female')}
@@ -249,7 +360,7 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
 
               {newError && <p className="text-xs text-red-400 font-bold">{newError}</p>}
 
-              {/* Botón Iniciar Juego (RF-06) */}
+              {-- Botón Iniciar Juego --}
               <button 
                 type="submit" 
                 disabled={!isLoaded}
@@ -262,7 +373,7 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
           </div>
         </div>
 
-        {/* COLUMNA 3: JUGADOR EXISTENTE & INFO (4 COLS) */}
+        {-- COLUMNA 3: JUGADOR EXISTENTE & INFO --}
         <div className={`lg:col-span-4 bg-[#06150c]/80 p-6 rounded-2xl border border-emerald-900/50 flex-col justify-between backdrop-blur-md ${activeTabMobile === 'existing' ? 'flex' : 'hidden md:flex'}`}>
           <div>
             <div className="flex items-center space-x-2 text-emerald-400 mb-1">
@@ -309,7 +420,7 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
             </form>
           </div>
 
-          {/* Sección de Instrucciones "¿CÓMO FUNCIONA?" */}
+          {-- Sección de Instrucciones --}
           <div className="mt-6 border-t border-emerald-950/80 pt-4 space-y-3">
             <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider">¿CÓMO FUNCIONA?</p>
             
@@ -349,7 +460,7 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
 
       </div>
 
-      {/* FOOTER INFORMATIVO INFERIOR */}
+      {-- FOOTER INFORMATIVO INFERIOR --}
       <div className="max-w-[1380px] w-full mx-auto border-t border-emerald-950/80 pt-3 mt-2 grid grid-cols-2 md:grid-cols-5 gap-3 text-left text-[11px] text-slate-400">
         <div className="flex items-center space-x-2">
           <div className="w-7 h-7 rounded bg-emerald-950/60 border border-emerald-800/40 flex items-center justify-center shrink-0 text-emerald-400">🛒</div>
@@ -393,4 +504,4 @@ export const GameLauncher: React.FC<GameLauncherProps> = ({ onStartGame }) => {
 
     </div>
   );
-};
+};*/
