@@ -22,6 +22,8 @@ const BUILDING_MODELS = {
   cafe: '/models/tienda_3.glb',
 };
 
+Object.values(BUILDING_MODELS).forEach((path) => useGLTF.preload(path));
+
 function ExternalBuilding({ modelPath, position, scale = 1, rotationY = 0 }: { modelPath: string; position: [number, number, number]; scale?: number; rotationY?: number }) {
   const { scene } = useGLTF(modelPath);
   return (

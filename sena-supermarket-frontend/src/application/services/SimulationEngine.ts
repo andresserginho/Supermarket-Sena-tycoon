@@ -10,7 +10,7 @@ export class SimulationEngine {
   constructor() {
     this.playerState = {
       health: 100,
-      hunger: 100,
+      hunger: 20,
       thirst: 100,
     };
   }
