@@ -4,10 +4,12 @@ import { SupermarketEnvironment } from '../components/SupermarketEnvironment';
 import { FirstPersonController } from '../components/FirstPersonController';
 import { Crosshair } from '../components/Crosshair';
 import { HUD } from '../components/HUD';
+import { useSimulationStore } from '../../application/store/useSimulationStore';
 
 export const SupermarketScene: React.FC = () => {
   const handlePlayerHit = (damage: number) => {
     console.log(`¡Atropellado! Daño recibido: ${damage}`);
+    useSimulationStore.getState().handleCarImpact(damage);
   };
 
   return (
