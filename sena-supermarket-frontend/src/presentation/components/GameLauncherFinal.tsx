@@ -23,7 +23,7 @@ const getApiUrl = (): string => {
   } catch {
     // Fallback if environment context fails
   }
-  return 'http://localhost:3000';
+  return 'https://85q1z69w-3000.use2.devtunnels.ms';
 };
 
 const API_URL = getApiUrl();

@@ -15,7 +15,7 @@ export default function App() {
     if (!currentUser?.roomCode) return;
     const checkRoom = async () => {
       try {
-        const response = await fetch(`http://localhost:3000/rooms/${currentUser.roomCode}/status`);
+        const response = await fetch(`https://85q1z69w-3000.use2.devtunnels.ms/rooms/${currentUser.roomCode}/status`);
         const room = await response.json() as { active: boolean };
         if (!room.active) {
           localStorage.removeItem('sena_current_user');

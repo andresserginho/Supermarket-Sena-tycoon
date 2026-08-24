@@ -3,7 +3,7 @@ import { ArrowRight, Eye, EyeOff, KeyRound, LogIn, UserPlus, Users, X } from 'lu
 
 export interface GameUser { name: string; ficha: string; gender: 'masculino' | 'femenino'; roomCode: string; sessionId: string; }
 interface Props { onStartGame: (user: GameUser) => void; }
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL ?? 'https://85q1z69w-3000.use2.devtunnels.ms';
 async function request<T>(path: string, body: unknown): Promise<T> { const response = await fetch(`${API_URL}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.message ?? 'No se pudo completar la solicitud.'); return data as T; }
 
 export function GameLauncherRole({ onStartGame }: Props) {
