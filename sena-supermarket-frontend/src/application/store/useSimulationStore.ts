@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { SimulationEngine, type PlayerState } from '../services/SimulationEngine';
-
+import type { ProgressPayload } from '../../infrastructure/api/progressApi';
 const engine = new SimulationEngine();
 
 export interface CartItem {
@@ -12,6 +12,10 @@ export interface CartItem {
 export interface SimulationStore {
   // Estado reactivo del jugador
   playerState: PlayerState;
+
+  // Progreso persistente
+  level: number;
+  expansions: string[];
 
   // Estado de caja registradora y economía para el HUD
   money: number;
@@ -28,6 +32,10 @@ export interface SimulationStore {
   addToCart: (item: CartItem) => void;
   processPayment: () => void;
 
+  // Progreso persistente: cargar y serializar
+  hydrateProgress: (progress: ProgressPayload) => void;
+  serializeProgress: () => ProgressPayload;
+
   // Motor de simulación desacoplado
   engine: SimulationEngine;
 }
@@ -35,6 +43,9 @@ export interface SimulationStore {
 export const useSimulationStore = create<SimulationStore>((set, get) => ({
   engine,
   playerState: engine.getPlayerState(),
+
+  level: 1,
+  expansions: [],
 
   money: 50000,
   totalSalesCount: 0,
@@ -75,5 +86,33 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
       currentCart: [],
       checkoutTotal: 0,
     });
+  },
+
+  hydrateProgress: (progress: ProgressPayload) => {
+    const updatedState = engine.setPlayerState({
+      health: progress.health,
+      hunger: progress.hunger,
+      thirst: progress.thirst,
+    });
+    set({
+      playerState: updatedState,
+      level: progress.level,
+      money: progress.money,
+      totalSalesCount: progress.sales,
+      expansions: progress.expansions,
+    });
+  },
+
+  serializeProgress: () => {
+    const { playerState, level, money, totalSalesCount, expansions } = get();
+    return {
+      level,
+      money,
+      sales: totalSalesCount,
+      health: playerState.health,
+      hunger: playerState.hunger,
+      thirst: playerState.thirst,
+      expansions,
+    };
   },
 }));

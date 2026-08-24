@@ -38,6 +38,14 @@ export class SimulationEngine {
   }
 
   /**
+   * Sobrescribe el estado del jugador (usado al cargar progreso guardado).
+   */
+  public setPlayerState(state: Partial<PlayerState>): PlayerState {
+    this.playerState = { ...this.playerState, ...state };
+    return this.getPlayerState();
+  }
+
+  /**
    * Retorna una copia inmutable del estado del jugador.
    */
   public getPlayerState(): PlayerState {
