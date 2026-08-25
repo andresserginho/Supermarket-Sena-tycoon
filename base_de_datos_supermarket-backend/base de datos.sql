@@ -69,6 +69,74 @@ CREATE TABLE IF NOT EXISTS progreso_aprendices (
 );
 
 -- =========================================================
+-- DEUDAS POR RECUPERACION DE VIDA
+-- =========================================================
+CREATE TABLE IF NOT EXISTS deudas_aprendices (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	id_aprendiz UUID NOT NULL UNIQUE REFERENCES aprendices(id) ON DELETE CASCADE,
+	monto NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (monto >= 0),
+	actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_deudas_aprendiz
+	ON deudas_aprendices(id_aprendiz);
+
+-- =========================================================
+-- BODEGA E INVENTARIO POR APRENDIZ
+-- =========================================================
+CREATE TABLE IF NOT EXISTS bodegas_aprendices (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	id_aprendiz UUID NOT NULL UNIQUE REFERENCES aprendices(id) ON DELETE CASCADE,
+	creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS inventario_bodegas (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	id_bodega UUID NOT NULL REFERENCES bodegas_aprendices(id) ON DELETE CASCADE,
+	id_producto VARCHAR(120) NOT NULL,
+	nombre_producto VARCHAR(160) NOT NULL,
+	cantidad INTEGER NOT NULL DEFAULT 0 CHECK (cantidad >= 0),
+	precio_unitario NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (precio_unitario >= 0),
+	actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	CONSTRAINT uq_inventario_bodega_producto UNIQUE (id_bodega, id_producto)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bodegas_aprendiz
+	ON bodegas_aprendices(id_aprendiz);
+
+CREATE INDEX IF NOT EXISTS idx_inventario_bodega
+	ON inventario_bodegas(id_bodega);
+
+CREATE TABLE IF NOT EXISTS cajas_bodega (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	id_bodega UUID NOT NULL REFERENCES bodegas_aprendices(id) ON DELETE CASCADE,
+	id_producto VARCHAR(120) NOT NULL,
+	nombre_producto VARCHAR(160) NOT NULL,
+	unidades_por_caja INTEGER NOT NULL CHECK (unidades_por_caja > 0),
+	cajas_disponibles INTEGER NOT NULL DEFAULT 0 CHECK (cajas_disponibles >= 0),
+	costo_total_caja NUMERIC(12,2) NOT NULL CHECK (costo_total_caja >= 0),
+	precio_venta_unidad NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (precio_venta_unidad >= 0),
+	actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	CONSTRAINT uq_caja_bodega_producto UNIQUE (id_bodega, id_producto)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cajas_bodega
+	ON cajas_bodega(id_bodega);
+
+CREATE TABLE IF NOT EXISTS productos_aprendices (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	id_aprendiz UUID NOT NULL REFERENCES aprendices(id) ON DELETE CASCADE,
+	id_producto VARCHAR(120) NOT NULL,
+	nombre VARCHAR(160) NOT NULL,
+	precio_venta_unidad NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (precio_venta_unidad >= 0),
+	actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	CONSTRAINT uq_producto_aprendiz_codigo UNIQUE (id_aprendiz, id_producto)
+);
+
+CREATE INDEX IF NOT EXISTS idx_productos_aprendiz
+	ON productos_aprendices(id_aprendiz);
+
+-- =========================================================
 -- SESIONES DE APRENDIZ
 -- =========================================================
 CREATE TABLE IF NOT EXISTS sesiones_aprendiz (
