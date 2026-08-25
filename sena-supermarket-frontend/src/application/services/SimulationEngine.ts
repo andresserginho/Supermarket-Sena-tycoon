@@ -10,7 +10,7 @@ export class SimulationEngine {
   constructor() {
     this.playerState = {
       health: 100,
-      hunger: 100,
+      hunger: 20,
       thirst: 100,
     };
   }
@@ -34,6 +34,14 @@ export class SimulationEngine {
       this.playerState.thirst = Math.min(100, this.playerState.thirst + amount);
       this.playerState.health = Math.min(100, this.playerState.health + 5);
     }
+    return this.getPlayerState();
+  }
+
+  /**
+   * Sobrescribe el estado del jugador (usado al cargar progreso guardado).
+   */
+  public setPlayerState(state: Partial<PlayerState>): PlayerState {
+    this.playerState = { ...this.playerState, ...state };
     return this.getPlayerState();
   }
 

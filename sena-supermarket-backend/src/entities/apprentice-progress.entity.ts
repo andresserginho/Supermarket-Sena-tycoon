@@ -3,32 +3,32 @@ import { Column, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeor
 @Entity('progreso_aprendices')
 export class ApprenticeProgress {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ name: 'id_aprendiz', type: 'uuid', unique: true })
-  apprenticeId: string;
+  apprenticeId!: string;
 
   @Column({ name: 'nivel', type: 'int' })
-  level: number;
+  level!: number;
 
   @Column({ name: 'dinero', type: 'numeric', precision: 12, scale: 2 })
-  money: number;
+  money!: number;
 
   @Column({ name: 'ventas', type: 'numeric', precision: 12, scale: 2 })
-  sales: number;
+  sales!: number;
 
   @Column({ name: 'salud', type: 'int' })
-  health: number;
+  health!: number;
 
   @Column({ name: 'hambre', type: 'int' })
-  hunger: number;
+  hunger!: number;
 
   @Column({ name: 'sed', type: 'int' })
-  thirst: number;
+  thirst!: number;
 
   @Column({ name: 'expansiones', type: 'jsonb' })
-  expansions: string[];
+  expansions!: string[];
 
   @UpdateDateColumn({ name: 'actualizado_en' })
-  updatedAt: Date;
+  updatedAt!: Date;
 }

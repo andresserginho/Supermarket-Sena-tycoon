@@ -22,6 +22,7 @@ export const HUD: React.FC = () => {
       <div className="pointer-events-auto bg-slate-900/80 backdrop-blur-md border border-slate-700 text-white p-3 rounded-xl shadow-lg w-56 text-xs space-y-1">
         <div>⚡ Energía: <span className="font-bold">{playerState.health}%</span></div>
         <div>🍗 Hambre: <span className="font-bold">{playerState.hunger}%</span></div>
+        <div>💧 Sed: <span className="font-bold">{playerState.thirst}%</span></div>
         <div className="text-[10px] text-slate-400 pt-1">Sube al segundo piso para descansar</div>
       </div>
 

@@ -31,6 +31,25 @@
 $ npm install
 ```
 
+### Configuracion de recuperacion
+
+El costo de recuperar la vida se puede cambiar con la variable de entorno
+`COSTO_RECUPERACION_VIDA`. Si no se define, el valor es `10000`.
+
+La bodega de cada aprendiz se consulta con `GET /progress/:apprenticeId/warehouse`
+y se actualiza con `PUT /progress/:apprenticeId/warehouse`, enviando `{ "items": [] }`.
+Cada item usa `productId`, `productName`, `quantity` y `unitPrice`.
+
+Las cajas se guardan con `PUT /progress/:apprenticeId/warehouse/boxes`, usando
+`productId`, `productName`, `unitsPerBox`, `boxesAvailable`, `boxCost` y `unitSalePrice`.
+El progreso de los aprendices activos de una sala se consulta con
+`GET /progress/room/:roomCode?instructorId=:instructorId`.
+
+El catálogo y precio de venta por aprendiz se consulta con
+`GET /progress/:apprenticeId/products` y se actualiza con
+`PUT /progress/:apprenticeId/products`. El precio de la tabla de productos es
+independiente del costo total pagado por cada caja.
+
 ## Compile and run the project
 
 ```bash

@@ -9,6 +9,7 @@ import { Instructor } from '../entities/instructor.entity';
 import { ApprenticeSession } from '../entities/apprentice-session.entity';
 import { ApprenticeProgress } from '../entities/apprentice-progress.entity';
 import { GAME_DEFAULTS } from '../config/game-defaults';
+import { ApprenticeWarehouse } from '../entities/apprentice-warehouse.entity';
 
 const hashPassword = (password: string) => createHash('sha256').update(password).digest('hex');
 
@@ -21,6 +22,7 @@ export class AuthService {
     @InjectRepository(GameRoom) private readonly rooms: Repository<GameRoom>,
     @InjectRepository(ApprenticeSession) private readonly sessions: Repository<ApprenticeSession>,
     @InjectRepository(ApprenticeProgress) private readonly progress: Repository<ApprenticeProgress>,
+    @InjectRepository(ApprenticeWarehouse) private readonly warehouses: Repository<ApprenticeWarehouse>,
   ) {}
 
   async registerInstructor(name: string, email: string, password: string, instructorKey: string) {
@@ -74,6 +76,7 @@ export class AuthService {
 
     const apprentice = await this.apprentices.save({ name: normalizedName, ficha: normalizedFicha, gender, passwordHash: hashPassword(password) });
     await this.progress.save({ apprenticeId: apprentice.id, ...GAME_DEFAULTS });
+    await this.warehouses.save({ apprenticeId: apprentice.id });
     const session = await this.sessions.save({ apprenticeId: apprentice.id, roomCode: room.code, status: 'activa' });
 
     return { id: apprentice.id, name: apprentice.name, ficha: apprentice.ficha, gender: apprentice.gender, roomCode: room.code, sessionId: session.id };
