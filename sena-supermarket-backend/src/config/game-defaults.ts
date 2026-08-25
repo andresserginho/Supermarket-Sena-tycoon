@@ -7,3 +7,5 @@ export const GAME_DEFAULTS = {
   thirst: 100,
   expansions: [] as string[],
 };
+
+export const DEFAULT_HEALTH_RECOVERY_COST = 10000;
