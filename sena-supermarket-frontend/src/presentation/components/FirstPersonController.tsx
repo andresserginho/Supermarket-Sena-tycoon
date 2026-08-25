@@ -38,15 +38,14 @@ function isPositionBlocked(x: number, z: number): boolean {
 }
 
 export const FirstPersonController: React.FC = () => {
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
   const moveState = useRef({ forward: false, backward: false, left: false, right: false });
-  
-  // Guardamos la rotación de la cámara para que no choque con PointerLockControls
   const rotationRef = useRef({ yaw: 0, pitch: 0 });
 
   useEffect(() => {
-    rotationRef.current.yaw = camera.rotation.y;
-    rotationRef.current.pitch = camera.rotation.x;
+    const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+    rotationRef.current.yaw = euler.y;
+    rotationRef.current.pitch = euler.x;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'KeyW' || e.code === 'ArrowUp') moveState.current.forward = true;
@@ -71,8 +70,11 @@ export const FirstPersonController: React.FC = () => {
   }, [camera]);
 
   useFrame((_, delta) => {
+    // Si estamos en sesión VR (Oculus Rift S), dejamos que WebXR gestione la posición y rotación del HMD
+    if (gl.xr.isPresenting) return;
+
     const speed = 10 * delta;
-    const lookSpeed = 2.5 * delta; // Sensibilidad de la cámara
+    const lookSpeed = 2.0 * delta; 
     const DEADZONE = 0.15;
 
     const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -85,46 +87,40 @@ export const FirstPersonController: React.FC = () => {
       if (gp && gp.connected) {
         const leftStickX = gp.axes[0]; 
         const leftStickY = gp.axes[1]; 
-        const rightStickX = gp.axes[2]; 
-        const rightStickY = gp.axes[3]; 
+        
+        // Ejes estándar del stick derecho en controles de Xbox (2 = X, 3 = Y)
+        const rawLookX = gp.axes[2]; 
+        const rawLookY = gp.axes[3] !== undefined ? gp.axes[3] : gp.axes[5];
 
-        if (leftStickX < -DEADZONE || leftStickX > DEADZONE) gamepadX = leftStickX;
-        if (leftStickY < -DEADZONE || leftStickY > DEADZONE) gamepadZ = leftStickY;
+        if (Math.abs(leftStickX) > DEADZONE) gamepadX = leftStickX;
+        if (Math.abs(leftStickY) > DEADZONE) gamepadZ = leftStickY;
 
-        if (rightStickX < -DEADZONE || rightStickX > DEADZONE) gamepadLookX = rightStickX;
-        if (rightStickY < -DEADZONE || rightStickY > DEADZONE) gamepadLookY = rightStickY;
+        if (rawLookX !== undefined && Math.abs(rawLookX) > DEADZONE) gamepadLookX = rawLookX;
+        if (rawLookY !== undefined && Math.abs(rawLookY) > DEADZONE) gamepadLookY = rawLookY;
 
         break;
       }
     }
 
-    // ===================================================
-    //  ROTACIÓN SOLUCIONADA DEL STICK DERECHO (R)
-    // ===================================================
-    if (gamepadLookX === 0 && gamepadLookY === 0) {
-      // Si el usuario usa el mouse, mantenemos sincronizadas las variables
-      rotationRef.current.yaw = camera.rotation.y;
-      rotationRef.current.pitch = camera.rotation.x;
-    } else {
-      // gamepadLookX (Eje Horizontal del Stick R) va al YAW (Mover a los lados)
-      rotationRef.current.yaw -= gamepadLookX * lookSpeed;
-      
-      // gamepadLookY (Eje Vertical del Stick R) va al PITCH (Mirar arriba y abajo)
-      rotationRef.current.pitch -= gamepadLookY * lookSpeed;
+    // Sincronizamos con la rotación actual por si el usuario movió el mouse con PointerLockControls
+    const currentEuler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+    rotationRef.current.yaw = currentEuler.y;
+    rotationRef.current.pitch = currentEuler.x;
 
-      // Límite de 90 grados para que la cabeza del personaje no gire 360 grados verticalmente
+    // Si se usa el stick derecho del control de Xbox, aplicamos el movimiento estilo Minecraft de forma limpia
+    if (gamepadLookX !== 0 || gamepadLookY !== 0) {
+      rotationRef.current.yaw -= gamepadLookX * lookSpeed;   // Derecha/Izquierda del stick R
+      rotationRef.current.pitch -= gamepadLookY * lookSpeed; // Arriba/Abajo del stick R
+
       const maxPitch = Math.PI / 2.0 - 0.05;
       rotationRef.current.pitch = Math.max(-maxPitch, Math.min(maxPitch, rotationRef.current.pitch));
 
-      // Aplicamos la rotación con quaterniones en orden YXZ para desvincular el bloqueo
-      const euler = new THREE.Euler(0, 0, 0, 'YXZ');
-      euler.x = rotationRef.current.pitch;
-      euler.y = rotationRef.current.yaw;
-      camera.quaternion.setFromEuler(euler);
+      const targetEuler = new THREE.Euler(rotationRef.current.pitch, rotationRef.current.yaw, 0, 'YXZ');
+      camera.quaternion.setFromEuler(targetEuler);
     }
 
     // ===================================================
-    //  MOVIMIENTO DE TRASLACIÓN DEL JUGADOR
+    //  MOVIMIENTO DE TRASLACIÓN (Teclado + Stick Izquierdo)
     // ===================================================
     const moveForward = (moveState.current.forward ? 1 : 0) - (moveState.current.backward ? 1 : 0) - gamepadZ;
     const moveSide = (moveState.current.right ? 1 : 0) - (moveState.current.left ? 1 : 0) + gamepadX;
@@ -156,5 +152,6 @@ export const FirstPersonController: React.FC = () => {
     camera.position.y = 1.6;
   });
 
+  // Devolvemos PointerLockControls para que el mouse vuelva a funcionar al hacer clic en la pantalla
   return <PointerLockControls />;
 };
