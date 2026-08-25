@@ -6,6 +6,7 @@ import { useSimulationStore } from './application/store/useSimulationStore';impo
 
 // Cada cuántos milisegundos se guarda automáticamente el progreso mientras se juega.
 const AUTOSAVE_INTERVAL_MS = 15000;
+const MIN_PROGRESS_LOADING_MS = 5000;
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<GameUser | null>(() => {
@@ -14,6 +15,7 @@ export default function App() {
   });
   const [loadingGame, setLoadingGame] = useState(false);
   const [progressReady, setProgressReady] = useState(false);
+  const [minLoadingElapsed, setMinLoadingElapsed] = useState(false);
 
   // Verifica cada cierto tiempo si la sala sigue activa; si el instructor la cierra,
   // expulsa al aprendiz al login (guardando su progreso justo antes de salir).
@@ -43,6 +45,8 @@ export default function App() {
     if (!currentUser?.id) return;
     let cancelled = false;
     setProgressReady(false);
+    setMinLoadingElapsed(false);
+    const minLoadingTimer = window.setTimeout(() => setMinLoadingElapsed(true), MIN_PROGRESS_LOADING_MS);
     getProgress(currentUser.id)
       .then((progress) => {
         if (cancelled) return;
@@ -54,7 +58,10 @@ export default function App() {
         // se sigue con los valores por defecto del store.
         if (!cancelled) setProgressReady(true);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      window.clearTimeout(minLoadingTimer);
+    };
   }, [currentUser?.id]);
 
   // Guarda el progreso automáticamente mientras el aprendiz está jugando,
@@ -83,7 +90,7 @@ export default function App() {
 
   // 2. Esperar a que el progreso guardado se cargue antes de mostrar la escena,
   //    para no arrancar el juego con valores por defecto y luego "saltar" al nivel real.
-  if (!progressReady) return <GameLoadingOverlay mode="progress" />;
+  if (!progressReady || !minLoadingElapsed) return <GameLoadingOverlay mode="progress" />;
 
   // 3. Cargar HUD e interfaz junto con la escena del supermercado
   return (

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { SupermarketEnvironment } from '../components/SupermarketEnvironment';
 import { FirstPersonController } from '../components/FirstPersonController';
@@ -7,9 +7,22 @@ import { HUD } from '../components/HUD';
 import { useSimulationStore } from '../../application/store/useSimulationStore';
 
 export const SupermarketScene: React.FC = () => {
+  const [hitDamage, setHitDamage] = useState<number | null>(null);
+  const hitTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (hitTimeoutRef.current) window.clearTimeout(hitTimeoutRef.current);
+  }, []);
+
   const handlePlayerHit = (damage: number) => {
     console.log(`¡Atropellado! Daño recibido: ${damage}`);
     useSimulationStore.getState().handleCarImpact(damage);
+    setHitDamage(damage);
+    if (hitTimeoutRef.current) window.clearTimeout(hitTimeoutRef.current);
+    hitTimeoutRef.current = window.setTimeout(() => {
+      setHitDamage(null);
+      hitTimeoutRef.current = null;
+    }, 3000);
   };
 
   return (
@@ -29,6 +42,26 @@ export const SupermarketScene: React.FC = () => {
       {/* Interfaz de usuario (HUD) y mira central */}
       <HUD />
       <Crosshair />
+      {hitDamage !== null && (
+        <div style={{
+          position: 'fixed',
+          bottom: '76px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '12px 20px',
+          border: '1px solid rgba(248, 113, 113, 0.7)',
+          borderRadius: '8px',
+          color: '#fecaca',
+          background: 'rgba(69, 10, 10, 0.9)',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)',
+          fontWeight: 700,
+          fontSize: '14px',
+          zIndex: 60,
+          pointerEvents: 'none',
+        }}>
+          ¡Atropellado! -{hitDamage} de salud
+        </div>
+      )}
     </div>
   );
 };
