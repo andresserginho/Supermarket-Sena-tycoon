@@ -32,3 +32,10 @@ export async function saveProgress(apprenticeId: string, payload: ProgressPayloa
     body: JSON.stringify(payload),
   });
 }
+
+export async function recoverHealth(apprenticeId: string): Promise<{ health: number; money: number; charged: number; debt: number }> {
+  const response = await fetch(`${API_URL}/progress/${apprenticeId}/health-recovery`, { method: 'POST' });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message ?? 'No se pudo recuperar la vida.');
+  return data;
+}

@@ -5,9 +5,13 @@ import { FirstPersonController } from '../components/FirstPersonController';
 import { Crosshair } from '../components/Crosshair';
 import { HUD } from '../components/HUD';
 import { useSimulationStore } from '../../application/store/useSimulationStore';
+import { recoverHealth } from '../../infrastructure/api/progressApi';
 
 export const SupermarketScene: React.FC = () => {
   const [hitDamage, setHitDamage] = useState<number | null>(null);
+  const [healthDepleted, setHealthDepleted] = useState(false);
+  const [recoveringHealth, setRecoveringHealth] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
   const hitTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -17,6 +21,7 @@ export const SupermarketScene: React.FC = () => {
   const handlePlayerHit = (damage: number) => {
     console.log(`¡Atropellado! Daño recibido: ${damage}`);
     useSimulationStore.getState().handleCarImpact(damage);
+    if (useSimulationStore.getState().playerState.health <= 0) setHealthDepleted(true);
     setHitDamage(damage);
     if (hitTimeoutRef.current) window.clearTimeout(hitTimeoutRef.current);
     hitTimeoutRef.current = window.setTimeout(() => {
@@ -60,6 +65,36 @@ export const SupermarketScene: React.FC = () => {
           pointerEvents: 'none',
         }}>
           ¡Atropellado! -{hitDamage} de salud
+        </div>
+      )}
+      {healthDepleted && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 pointer-events-auto">
+          <div className="w-full max-w-md rounded-2xl border border-red-400/50 bg-slate-950 p-7 text-center text-white shadow-2xl">
+            <h2 className="text-2xl font-bold text-red-300">VIDA AGOTADA</h2>
+            <p className="mt-3 text-slate-200">Debes pagar $10.000 COP para recuperar toda tu vida y continuar con tu progreso.</p>
+            <button
+              className="mt-6 rounded-xl bg-emerald-600 px-6 py-3 font-bold text-white hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-60"
+              disabled={recoveringHealth}
+              onClick={async () => {
+                const savedUser = localStorage.getItem('sena_current_user');
+                if (!savedUser) return;
+                setRecoveringHealth(true);
+                setRecoveryError('');
+                try {
+                  const result = await recoverHealth(JSON.parse(savedUser).id);
+                  useSimulationStore.setState({ money: result.money });
+                  useSimulationStore.getState().engine.setPlayerState({ health: result.health });
+                  useSimulationStore.setState({ playerState: useSimulationStore.getState().engine.getPlayerState() });
+                  setHealthDepleted(false);
+                } catch (error) {
+                  setRecoveryError(error instanceof Error ? error.message : 'No se pudo procesar la recuperación.');
+                } finally {
+                  setRecoveringHealth(false);
+                }
+              }}
+            >{recoveringHealth ? 'PROCESANDO...' : 'RECUPERAR VIDA'}</button>
+            {recoveryError && <p className="mt-3 text-sm text-red-300">{recoveryError}</p>}
+          </div>
         </div>
       )}
     </div>

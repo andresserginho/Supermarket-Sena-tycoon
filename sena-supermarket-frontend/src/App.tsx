@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useProgress } from '@react-three/drei';
-import { GameLauncherRole as GameLauncher, type GameUser } from './presentation/components/GameLauncherRole';
+import { GameLauncherWithAdmin as GameLauncher } from './presentation/components/GameLauncherWithAdmin';
+import type { GameUser } from './presentation/components/GameLauncherRole';
+import { InstructorProgressPanel } from './presentation/components/InstructorProgressPanel';
 import { SupermarketScene } from './presentation/scenes/SupermarketScene';
 import { useSimulationStore } from './application/store/useSimulationStore';import { getProgress, saveProgress } from './infrastructure/api/progressApi';
 
@@ -44,6 +46,12 @@ export default function App() {
   // y lo aplica al store antes de dejar entrar al juego.
   useEffect(() => {
     if (!currentUser?.id) return;
+    if (currentUser.role === 'admin') {
+      setProgressReady(true);
+      setMinLoadingElapsed(true);
+      setLoadingPercent(100);
+      return;
+    }
     let cancelled = false;
     setProgressReady(false);
     setMinLoadingElapsed(false);
@@ -76,7 +84,7 @@ export default function App() {
   // Guarda el progreso automáticamente mientras el aprendiz está jugando,
   // y también justo antes de cerrar/recargar la pestaña.
   useEffect(() => {
-    if (!currentUser?.id || !progressReady) return;
+    if (!currentUser?.id || currentUser.role === 'admin' || !progressReady) return;
 
     const persist = () => {
       saveProgress(currentUser.id, useSimulationStore.getState().serializeProgress());
@@ -94,7 +102,7 @@ export default function App() {
 
   // 1. Mostrar pantalla de inicio si no hay usuario registrado
   if (!currentUser) {
-    return <GameLauncher onStartGame={(user) => { setCurrentUser(user); setLoadingGame(true); }} />;
+    return <><GameLauncher onStartGame={(user) => { setCurrentUser(user); setLoadingGame(true); }} /><InstructorProgressPanel /></>;
   }
 
   // 2. Esperar a que el progreso guardado se cargue antes de mostrar la escena,
