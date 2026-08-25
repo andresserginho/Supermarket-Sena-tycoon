@@ -16,6 +16,7 @@ export default function App() {
   const [loadingGame, setLoadingGame] = useState(false);
   const [progressReady, setProgressReady] = useState(false);
   const [minLoadingElapsed, setMinLoadingElapsed] = useState(false);
+  const [loadingPercent, setLoadingPercent] = useState(0);
 
   // Verifica cada cierto tiempo si la sala sigue activa; si el instructor la cierra,
   // expulsa al aprendiz al login (guardando su progreso justo antes de salir).
@@ -46,6 +47,13 @@ export default function App() {
     let cancelled = false;
     setProgressReady(false);
     setMinLoadingElapsed(false);
+    setLoadingPercent(0);
+    const loadingStartedAt = Date.now();
+    const loadingProgressInterval = window.setInterval(() => {
+      const elapsed = Date.now() - loadingStartedAt;
+      setLoadingPercent(Math.min(100, (elapsed / MIN_PROGRESS_LOADING_MS) * 100));
+      if (elapsed >= MIN_PROGRESS_LOADING_MS) window.clearInterval(loadingProgressInterval);
+    }, 50);
     const minLoadingTimer = window.setTimeout(() => setMinLoadingElapsed(true), MIN_PROGRESS_LOADING_MS);
     getProgress(currentUser.id)
       .then((progress) => {
@@ -60,6 +68,7 @@ export default function App() {
       });
     return () => {
       cancelled = true;
+      window.clearInterval(loadingProgressInterval);
       window.clearTimeout(minLoadingTimer);
     };
   }, [currentUser?.id]);
@@ -90,7 +99,7 @@ export default function App() {
 
   // 2. Esperar a que el progreso guardado se cargue antes de mostrar la escena,
   //    para no arrancar el juego con valores por defecto y luego "saltar" al nivel real.
-  if (!progressReady || !minLoadingElapsed) return <GameLoadingOverlay mode="progress" />;
+  if (!progressReady || !minLoadingElapsed) return <GameLoadingOverlay mode="progress" progress={loadingPercent} />;
 
   // 3. Cargar HUD e interfaz junto con la escena del supermercado
   return (
@@ -120,7 +129,7 @@ function GameResourceLoading({ onReady }: { onReady: () => void }) {
 }
 
 function GameLoadingOverlay({ mode, item = 'Conectando con tu supermercado', loaded = 0, total = 0, progress = 16 }: { mode: 'progress' | 'resources'; item?: string; loaded?: number; total?: number; progress?: number }) {
-  const percentage = mode === 'progress' ? progress : Math.min(100, Math.max(8, Math.round(progress)));
+  const percentage = mode === 'progress' ? Math.round(progress) : Math.min(100, Math.max(8, Math.round(progress)));
   const steps = mode === 'progress'
     ? ['Validando aprendiz', 'Recuperando progreso', 'Preparando partida']
     : ['Escenario', 'Edificios y tiendas', 'Tráfico y entorno'];
