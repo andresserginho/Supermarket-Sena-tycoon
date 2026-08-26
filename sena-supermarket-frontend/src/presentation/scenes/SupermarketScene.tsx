@@ -21,7 +21,8 @@ export const SupermarketScene: React.FC = () => {
   const handlePlayerHit = (damage: number) => {
     console.log(`¡Atropellado! Daño recibido: ${damage}`);
     useSimulationStore.getState().handleCarImpact(damage);
-    if (useSimulationStore.getState().playerState.health <= 0) setHealthDepleted(true);
+    const health = useSimulationStore.getState().playerState.health;
+    if (health <= 0) setHealthDepleted(true);
     setHitDamage(damage);
     if (hitTimeoutRef.current) window.clearTimeout(hitTimeoutRef.current);
     hitTimeoutRef.current = window.setTimeout(() => {
@@ -68,16 +69,17 @@ export const SupermarketScene: React.FC = () => {
         </div>
       )}
       {healthDepleted && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 pointer-events-auto">
-          <div className="w-full max-w-md rounded-2xl border border-red-400/50 bg-slate-950 p-7 text-center text-white shadow-2xl">
-            <h2 className="text-2xl font-bold text-red-300">VIDA AGOTADA</h2>
-            <p className="mt-3 text-slate-200">Debes pagar $10.000 COP para recuperar toda tu vida y continuar con tu progreso.</p>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'rgba(0, 0, 0, 0.78)', pointerEvents: 'auto' }}>
+          <div style={{ width: '100%', maxWidth: '420px', padding: '28px', border: '1px solid rgba(248, 113, 113, 0.7)', borderRadius: '16px', background: '#020617', color: '#fff', textAlign: 'center', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6)' }}>
+            <h2 style={{ margin: 0, color: '#fca5a5', fontSize: '24px', fontWeight: 700 }}>VIDA AGOTADA</h2>
+            <p style={{ margin: '12px 0 0', color: '#e2e8f0' }}>Debes pagar $10.000 COP para recuperar toda tu vida y continuar con tu progreso.</p>
             <button
-              className="mt-6 rounded-xl bg-emerald-600 px-6 py-3 font-bold text-white hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-60"
+              style={{ marginTop: '24px', padding: '12px 24px', border: 0, borderRadius: '12px', background: recoveringHealth ? '#475569' : '#059669', color: '#fff', fontWeight: 700, cursor: recoveringHealth ? 'wait' : 'pointer' }}
               disabled={recoveringHealth}
               onClick={async () => {
                 const savedUser = localStorage.getItem('sena_current_user');
                 if (!savedUser) return;
+                if (!window.confirm('¿Pagar $10.000 COP para recuperar toda tu vida?')) return;
                 setRecoveringHealth(true);
                 setRecoveryError('');
                 try {
@@ -93,7 +95,7 @@ export const SupermarketScene: React.FC = () => {
                 }
               }}
             >{recoveringHealth ? 'PROCESANDO...' : 'RECUPERAR VIDA'}</button>
-            {recoveryError && <p className="mt-3 text-sm text-red-300">{recoveryError}</p>}
+            {recoveryError && <p style={{ marginTop: '12px', color: '#fca5a5', fontSize: '14px' }}>{recoveryError}</p>}
           </div>
         </div>
       )}
