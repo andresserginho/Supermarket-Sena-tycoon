@@ -24,22 +24,74 @@ import { ProgressModule } from './progress/progress.module';
       isGlobal: true,
     }),
 
-    // Conexión dinámica a PostgreSQL
+    // Conexión dinámica a PostgreSQL usando DATABASE_URL (con respaldo local)
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DB_HOST', 'localhost'),
-        port: configService.get<number>('DB_PORT', 5432),
-        username: configService.get<string>('DB_USERNAME', 'postgres'),
-        password: configService.get<string>('DB_PASSWORD', ''),
-        database: configService.get<string>('DB_DATABASE', 'sena_supermarket_db'),
-        entities: [Instructor, GameRoom, Apprentice, ApprenticeSession, ApprenticeProgress, ApprenticeDebt, ApprenticeWarehouse, WarehouseInventory, WarehouseBox, ApprenticeProduct],
-        synchronize: false, // Usamos las tablas que ya creamos en pgAdmin
-      }),
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        
+        if (databaseUrl) {
+          return {
+            type: 'postgres',
+            url: databaseUrl,
+            entities: [
+              Instructor, 
+              GameRoom, 
+              Apprentice, 
+              ApprenticeSession, 
+              ApprenticeProgress, 
+              ApprenticeDebt, 
+              ApprenticeWarehouse, 
+              WarehouseInventory, 
+              WarehouseBox, 
+              ApprenticeProduct
+            ],
+            synchronize: false,
+            ssl: {
+              rejectUnauthorized: false, // Necesario para conexiones seguras a Supabase
+            },
+          };
+        }
+
+        // Respaldo por si corres en local con variables separadas
+        return {
+          type: 'postgres',
+          host: configService.get<string>('DB_HOST', 'localhost'),
+          port: configService.get<number>('DB_PORT', 5432),
+          username: configService.get<string>('DB_USERNAME', 'postgres'),
+          password: configService.get<string>('DB_PASSWORD', ''),
+          database: configService.get<string>('DB_DATABASE', 'sena_supermarket_db'),
+          entities: [
+            Instructor, 
+            GameRoom, 
+            Apprentice, 
+            ApprenticeSession, 
+            ApprenticeProgress, 
+            ApprenticeDebt, 
+            ApprenticeWarehouse, 
+            WarehouseInventory, 
+            WarehouseBox, 
+            ApprenticeProduct
+          ],
+          synchronize: false,
+        };
+      },
     }),
-    TypeOrmModule.forFeature([Instructor, GameRoom, Apprentice, ApprenticeSession, ApprenticeProgress, ApprenticeDebt, ApprenticeWarehouse, WarehouseInventory, WarehouseBox, ApprenticeProduct]),
+
+    TypeOrmModule.forFeature([
+      Instructor, 
+      GameRoom, 
+      Apprentice, 
+      ApprenticeSession, 
+      ApprenticeProgress, 
+      ApprenticeDebt, 
+      ApprenticeWarehouse, 
+      WarehouseInventory, 
+      WarehouseBox, 
+      ApprenticeProduct
+    ]),
+    
     ProgressModule,
   ],
   controllers: [AppController, AuthController],
