@@ -16,10 +16,6 @@ export default function App() {
     const saved = localStorage.getItem('sena_current_user');
     if (!saved) return null;
     const user = JSON.parse(saved) as GameUser;
-    if (user.role === 'admin') {
-      localStorage.removeItem('sena_current_user');
-      return null;
-    }
     return user;
   });
   const [loadingGame, setLoadingGame] = useState(false);
@@ -30,7 +26,7 @@ export default function App() {
   // Verifica cada cierto tiempo si la sala sigue activa; si el instructor la cierra,
   // expulsa al aprendiz al login (guardando su progreso justo antes de salir).
   useEffect(() => {
-    if (!currentUser?.roomCode) return;
+    if (!currentUser?.roomCode || currentUser.role === 'admin') return;
     const checkRoom = async () => {
       try {
         const response = await fetch(`${API_URL}/rooms/${currentUser.roomCode}/status`);
@@ -52,7 +48,11 @@ export default function App() {
   // Al iniciar sesión, carga el progreso guardado del aprendiz (nivel, dinero, salud, etc.)
   // y lo aplica al store antes de dejar entrar al juego.
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id || currentUser.role === 'admin') {
+      setProgressReady(true);
+      setMinLoadingElapsed(true);
+      return;
+    }
     let cancelled = false;
     setProgressReady(false);
     setMinLoadingElapsed(false);
@@ -85,7 +85,7 @@ export default function App() {
   // Guarda el progreso automáticamente mientras el aprendiz está jugando,
   // y también justo antes de cerrar/recargar la pestaña.
   useEffect(() => {
-    if (!currentUser?.id || !progressReady) return;
+    if (!currentUser?.id || currentUser.role === 'admin' || !progressReady) return;
 
     const persist = () => {
       saveProgress(currentUser.id, useSimulationStore.getState().serializeProgress());
