@@ -1,13 +1,19 @@
 import { useState } from 'react';
+import { useEffect } from 'react';
 import { ArrowRight, Eye, EyeOff, KeyRound, LogIn, UserPlus, Users, X } from 'lucide-react';
 
 export interface GameUser { id: string; name: string; ficha: string; gender: 'masculino' | 'femenino'; roomCode: string; sessionId: string; role?: 'admin'; }
 interface Props { onStartGame: (user: GameUser) => void; }
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL ?? 'https://85q1z69w-3000.use2.devtunnels.ms'; 
 async function request<T>(path: string, body: unknown): Promise<T> { const response = await fetch(`${API_URL}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.message ?? 'No se pudo completar la solicitud.'); return data as T; }
 
 export function GameLauncherRole({ onStartGame }: Props) {
-  const [mode, setModeState] = useState<'apprentice' | 'instructor'>('apprentice'); const [isRegister, setIsRegister] = useState(true); const [name, setName] = useState(''); const [ficha, setFicha] = useState(''); const [gender, setGender] = useState<'masculino' | 'femenino'>('masculino'); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [roomCode, setRoomCode] = useState(''); const [roomName, setRoomName] = useState('Sala de entrenamiento'); const [showPassword, setShowPassword] = useState(false); const [instructorId, setInstructorId] = useState(''); const [generatedCode, setGeneratedCode] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const [mode, setModeState] = useState<'apprentice' | 'instructor'>('instructor'); const [isRegister, setIsRegister] = useState(true); const [name, setName] = useState(''); const [ficha, setFicha] = useState(''); const [gender, setGender] = useState<'masculino' | 'femenino'>('masculino'); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [roomCode, setRoomCode] = useState(''); const [roomName, setRoomName] = useState('Sala de entrenamiento'); const [showPassword, setShowPassword] = useState(false); const [instructorId, setInstructorId] = useState(''); const [generatedCode, setGeneratedCode] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (instructorId && generatedCode) localStorage.setItem('sena_instructor_room', JSON.stringify({ instructorId, roomCode: generatedCode }));
+    else localStorage.removeItem('sena_instructor_room');
+    if (instructorId && generatedCode) window.dispatchEvent(new Event('sena-room-created'));
+  }, [instructorId, generatedCode]);
   const resetForm = () => { setName(''); setFicha(''); setGender('masculino'); setEmail(''); setPassword(''); setRoomCode(''); setRoomName('Sala de entrenamiento'); setShowPassword(false); setError(''); };
   const setMode = (nextMode: 'apprentice' | 'instructor') => { resetForm(); setModeState(nextMode); };
   const submit = async (event: React.FormEvent) => { event.preventDefault(); setError(''); setBusy(true); try { if (mode === 'apprentice') { const user = isRegister ? await request<GameUser>('/auth/apprentice/register', { name, ficha, gender, password, roomCode }) : await request<GameUser>('/auth/apprentice/login', { name, ficha, password, roomCode }); localStorage.setItem('sena_current_user', JSON.stringify(user)); onStartGame(user); } else { const instructorKey = isRegister ? window.prompt('Escribe la clave privada de registro de instructor') ?? '' : ''; const instructor = isRegister ? await request<{ id: string }>('/auth/instructor/register', { name, email, password, instructorKey }) : await request<{ id: string }>('/auth/instructor/login', { email, password }); const room = await request<{ code: string }>('/rooms', { instructorId: instructor.id, name: roomName }); setInstructorId(instructor.id); setGeneratedCode(room.code); } } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'No se pudo completar la solicitud.'); } finally { setBusy(false); } };

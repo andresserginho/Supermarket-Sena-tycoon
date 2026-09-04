@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useProgress } from '@react-three/drei';
-import { GameLauncherWithAdmin as GameLauncher } from './presentation/components/GameLauncherWithAdmin';
+import { GameLauncherRole as GameLauncher } from './presentation/components/GameLauncherRole';
 import type { GameUser } from './presentation/components/GameLauncherRole';
 import { InstructorProgressPanel } from './presentation/components/InstructorProgressPanel';
 import { SupermarketScene } from './presentation/scenes/SupermarketScene';
-import { useSimulationStore } from './application/store/useSimulationStore';import { getProgress, saveProgress } from './infrastructure/api/progressApi';
+import { useSimulationStore } from './application/store/useSimulationStore';
+import { API_URL, getProgress, saveProgress } from './infrastructure/api/progressApi';
 
 // Cada cuántos milisegundos se guarda automáticamente el progreso mientras se juega.
 const AUTOSAVE_INTERVAL_MS = 15000;
@@ -13,7 +14,13 @@ const MIN_PROGRESS_LOADING_MS = 5000;
 export default function App() {
   const [currentUser, setCurrentUser] = useState<GameUser | null>(() => {
     const saved = localStorage.getItem('sena_current_user');
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    const user = JSON.parse(saved) as GameUser;
+    if (user.role === 'admin') {
+      localStorage.removeItem('sena_current_user');
+      return null;
+    }
+    return user;
   });
   const [loadingGame, setLoadingGame] = useState(false);
   const [progressReady, setProgressReady] = useState(false);
@@ -26,7 +33,7 @@ export default function App() {
     if (!currentUser?.roomCode) return;
     const checkRoom = async () => {
       try {
-        const response = await fetch(`http://localhost:3000/rooms/${currentUser.roomCode}/status`);
+        const response = await fetch(`${API_URL}/rooms/${currentUser.roomCode}/status`);
         const room = await response.json() as { active: boolean };
         if (!room.active) {
           await saveProgress(currentUser.id, useSimulationStore.getState().serializeProgress());
@@ -46,12 +53,6 @@ export default function App() {
   // y lo aplica al store antes de dejar entrar al juego.
   useEffect(() => {
     if (!currentUser?.id) return;
-    if (currentUser.role === 'admin') {
-      setProgressReady(true);
-      setMinLoadingElapsed(true);
-      setLoadingPercent(100);
-      return;
-    }
     let cancelled = false;
     setProgressReady(false);
     setMinLoadingElapsed(false);
@@ -84,7 +85,7 @@ export default function App() {
   // Guarda el progreso automáticamente mientras el aprendiz está jugando,
   // y también justo antes de cerrar/recargar la pestaña.
   useEffect(() => {
-    if (!currentUser?.id || currentUser.role === 'admin' || !progressReady) return;
+    if (!currentUser?.id || !progressReady) return;
 
     const persist = () => {
       saveProgress(currentUser.id, useSimulationStore.getState().serializeProgress());
