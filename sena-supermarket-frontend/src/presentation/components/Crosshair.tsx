@@ -11,7 +11,7 @@ export const Crosshair: React.FC<{ isInteractive?: boolean }> = ({ isInteractive
       width: '16px',
       height: '16px',
       borderRadius: '50%',
-      border: `2px solid ${isInteractive ? '#ff3333' : '#ff0000'}`,
+      border: `2px solid ${isInteractive ? '#ff0000' : '#ff0000'}`,
       backgroundColor: '#000000',
       boxShadow: isInteractive ? '0 0 8px #ff0000' : 'none',
       zIndex: 9999,

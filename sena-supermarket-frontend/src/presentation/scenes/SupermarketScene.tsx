@@ -1,100 +1,93 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { SupermarketEnvironment } from '../components/SupermarketEnvironment';
 import { FirstPersonController } from '../components/FirstPersonController';
 import { Crosshair } from '../components/Crosshair';
-import { HUD } from '../components/HUD';
+import { PhoneUI } from '../components/PhoneUI';
+import { HeldPhone3D } from '../components/HeldPhone3D';
+import { CashRegisterCounter } from '../components/CashRegisterCounter';
+import { DayNightCycle } from '../components/DayNightCycle';
+import { StreetLights } from '../components/StreetLights';
+import { DeliveryBoxes } from '../components/DeliveryBox';
 import { useSimulationStore } from '../../application/store/useSimulationStore';
-import { recoverHealth } from '../../infrastructure/api/progressApi';
+import { usePhoneStore } from '../../application/store/usePhoneStore';
 
 export const SupermarketScene: React.FC = () => {
   const [hitDamage, setHitDamage] = useState<number | null>(null);
-  const [healthDepleted, setHealthDepleted] = useState(false);
-  const [recoveringHealth, setRecoveringHealth] = useState(false);
-  const [recoveryError, setRecoveryError] = useState('');
-  const hitTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const hitTimeoutRef = useRef<number | null>(null);
 
-  useEffect(() => () => {
-    if (hitTimeoutRef.current) window.clearTimeout(hitTimeoutRef.current);
+  // Control de apertura (M) y cierre (N) exclusivo por teclado
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = (e.target as HTMLElement)?.tagName;
+      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+
+      const key = e.key.toLowerCase();
+      if (key === 'm') {
+        usePhoneStore.setState({ isOpen: true });
+      } else if (key === 'n') {
+        usePhoneStore.setState({ isOpen: false });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Procesamiento de colisión con vehículos (solo descuenta salud)
   const handlePlayerHit = (damage: number) => {
-    console.log(`¡Atropellado! Daño recibido: ${damage}`);
-    useSimulationStore.getState().handleCarImpact(damage);
-    if (useSimulationStore.getState().playerState.health <= 0) setHealthDepleted(true);
+    const currentHealth = useSimulationStore.getState().playerState.health;
+    const newHealth = Math.max(0, currentHealth - damage);
+
+    useSimulationStore.setState({
+      playerState: {
+        ...useSimulationStore.getState().playerState,
+        health: newHealth,
+      },
+    });
+
     setHitDamage(damage);
+
     if (hitTimeoutRef.current) window.clearTimeout(hitTimeoutRef.current);
-    hitTimeoutRef.current = window.setTimeout(() => {
-      setHitDamage(null);
-      hitTimeoutRef.current = null;
-    }, 3000);
+    hitTimeoutRef.current = window.setTimeout(() => setHitDamage(null), 1000);
   };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#38bdf8' }}>
-      <Canvas camera={{ position: [0, 1.7, 6], fov: 65 }}>
-        {/* Iluminación Diurna */}
-        <ambientLight intensity={1.0} />
-        <directionalLight position={[15, 25, 15]} intensity={1.5} castShadow />
-
-        {/* Entorno 3D del supermercado */}
+    <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
+      <Canvas shadows camera={{ position: [0, 1.6, 5], fov: 75 }}>
+        <DayNightCycle />
+        <StreetLights />
         <SupermarketEnvironment onPlayerHit={handlePlayerHit} />
-
-        {/* Control del jugador en primera persona */}
         <FirstPersonController />
+        <HeldPhone3D />
+        <CashRegisterCounter position={[-16, 0, 5]} />
+
+        {/* Renderizador de Cajas de Pedidos dentro del entorno 3D */}
+        <DeliveryBoxes />
       </Canvas>
 
-      {/* Interfaz de usuario (HUD) y mira central */}
-      <HUD />
       <Crosshair />
+      <PhoneUI />
+
+      {/* Notificación de daño visual temporal */}
       {hitDamage !== null && (
-        <div style={{
-          position: 'fixed',
-          bottom: '76px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          padding: '12px 20px',
-          border: '1px solid rgba(248, 113, 113, 0.7)',
-          borderRadius: '8px',
-          color: '#fecaca',
-          background: 'rgba(69, 10, 10, 0.9)',
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)',
-          fontWeight: 700,
-          fontSize: '14px',
-          zIndex: 60,
-          pointerEvents: 'none',
-        }}>
-          ¡Atropellado! -{hitDamage} de salud
-        </div>
-      )}
-      {healthDepleted && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 pointer-events-auto">
-          <div className="w-full max-w-md rounded-2xl border border-red-400/50 bg-slate-950 p-7 text-center text-white shadow-2xl">
-            <h2 className="text-2xl font-bold text-red-300">VIDA AGOTADA</h2>
-            <p className="mt-3 text-slate-200">Debes pagar $10.000 COP para recuperar toda tu vida y continuar con tu progreso.</p>
-            <button
-              className="mt-6 rounded-xl bg-emerald-600 px-6 py-3 font-bold text-white hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-60"
-              disabled={recoveringHealth}
-              onClick={async () => {
-                const savedUser = localStorage.getItem('sena_current_user');
-                if (!savedUser) return;
-                setRecoveringHealth(true);
-                setRecoveryError('');
-                try {
-                  const result = await recoverHealth(JSON.parse(savedUser).id);
-                  useSimulationStore.setState({ money: result.money });
-                  useSimulationStore.getState().engine.setPlayerState({ health: result.health });
-                  useSimulationStore.setState({ playerState: useSimulationStore.getState().engine.getPlayerState() });
-                  setHealthDepleted(false);
-                } catch (error) {
-                  setRecoveryError(error instanceof Error ? error.message : 'No se pudo procesar la recuperación.');
-                } finally {
-                  setRecoveringHealth(false);
-                }
-              }}
-            >{recoveringHealth ? 'PROCESANDO...' : 'RECUPERAR VIDA'}</button>
-            {recoveryError && <p className="mt-3 text-sm text-red-300">{recoveryError}</p>}
-          </div>
+        <div
+          style={{
+            position: 'absolute',
+            top: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(239, 68, 68, 0.9)',
+            color: '#ffffff',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            fontFamily: 'sans-serif',
+            fontWeight: 'bold',
+            pointerEvents: 'none',
+            zIndex: 1000,
+          }}
+        >
+          ¡CUIDADO! -{hitDamage} PV
         </div>
       )}
     </div>

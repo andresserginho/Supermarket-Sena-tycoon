@@ -1,8 +1,11 @@
-import React, { Suspense } from 'react';
+// src/presentation/components/SupermarketEnvironment.tsx
+import React, { Suspense, useEffect } from 'react';
 import { useGLTF } from '@react-three/drei';
+import * as THREE from 'three';
 import { CarTraffic } from './CarTraffic';
 import { SupermarketExpansions } from './SupermarketExpansions';
 import { SupermarketStructure } from './SupermarketStructure';
+import { addColliderFromMesh, clearColliders } from '../utils/colliders';
 
 const SUPERMARKET_CONFIG = {
   position: [-16, 0, 0] as [number, number, number],
@@ -26,6 +29,21 @@ Object.values(BUILDING_MODELS).forEach((path) => useGLTF.preload(path));
 
 function ExternalBuilding({ modelPath, position, scale = 1, rotationY = 0 }: { modelPath: string; position: [number, number, number]; scale?: number; rotationY?: number }) {
   const { scene } = useGLTF(modelPath);
+
+  useEffect(() => {
+    const clonedScene = scene.clone();
+    clonedScene.position.set(...position);
+    clonedScene.scale.set(scale, scale, scale);
+    clonedScene.rotation.set(0, rotationY, 0);
+    clonedScene.updateMatrixWorld(true);
+
+    clonedScene.traverse((child: any) => {
+      if (child.isMesh) {
+        addColliderFromMesh(child);
+      }
+    });
+  }, [scene, position, scale, rotationY]);
+
   return (
     <primitive 
       object={scene.clone()} 
@@ -45,6 +63,13 @@ export const SupermarketEnvironment: React.FC<SupermarketEnvironmentProps> = ({
   level = 1, 
   onPlayerHit 
 }) => {
+  useEffect(() => {
+    clearColliders();
+    return () => {
+      clearColliders();
+    };
+  }, []);
+
   const { position } = SUPERMARKET_CONFIG;
 
   const buildingsData = [
@@ -100,16 +125,16 @@ export const SupermarketEnvironment: React.FC<SupermarketEnvironmentProps> = ({
       </group>
 
       {/* 2. ACERAS / ANDENES */}
-      <mesh position={[-14.90, 0.08, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow> {/*-13.89 . 0. 08 .  0*/}
+      <mesh position={[-14.90, 0.08, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[20, 180]} />
         <meshStandardMaterial color="#cbd5e1" roughness={0.6} />
       </mesh>
-      <mesh position={[15.85, 0.08, 4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>  {/* 15.46 . 0.08 .  4*/}
+      <mesh position={[15.85, 0.08, 4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[22, 180]} />
         <meshStandardMaterial color="#cbd5e1" roughness={0.6} />
       </mesh>
 
-      {/* 3. SUPERMERCADO MODULAR (Reemplaza la caja negra por los modelos de Blender) */}
+      {/* 3. SUPERMERCADO MODULAR */}
       <SupermarketStructure 
         position={position} 
         unlockedZones={1} 
@@ -129,14 +154,8 @@ export const SupermarketEnvironment: React.FC<SupermarketEnvironmentProps> = ({
       </Suspense>
 
       {/* 5. MUROS LÍMITE */}
-      <mesh position={[26.20, 2.5, 0]}> {/*26.20*/}
-        <boxGeometry args={[0.5, 5, 180]} />
-        <meshStandardMaterial color="#475569" roughness={0.7} />
-      </mesh>
-      <mesh position={[-24, 2.5, 0]}>
-        <boxGeometry args={[0.5, 5, 180]} />
-        <meshStandardMaterial color="#475569" roughness={0.7} />
-      </mesh>
+      <BoundaryWall position={[26.20, 2.5, 0]} args={[0.5, 5, 180]} />
+      <BoundaryWall position={[-24, 2.5, 0]} args={[0.5, 5, 180]} />
 
       {/* 6. TÚNEL URBANO */}
       <group position={[0, 0, -80]}>
@@ -155,3 +174,20 @@ export const SupermarketEnvironment: React.FC<SupermarketEnvironmentProps> = ({
     </group>
   );
 };
+
+function BoundaryWall({ position, args }: { position: [number, number, number]; args: [number, number, number] }) {
+  const meshRef = React.useRef<THREE.Mesh>(null);
+
+  useEffect(() => {
+    if (meshRef.current) {
+      addColliderFromMesh(meshRef.current);
+    }
+  }, []);
+
+  return (
+    <mesh ref={meshRef} position={position}>
+      <boxGeometry args={args} />
+      <meshStandardMaterial color="#475569" roughness={0.7} />
+    </mesh>
+  );
+}

@@ -1,36 +1,22 @@
+// src/presentation/components/FirstPersonController.tsx
 import React, { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { PointerLockControls } from '@react-three/drei';
 import * as THREE from 'three';
+import { worldColliders } from '../utils/colliders';
+import { usePhoneStore } from '../../application/store/usePhoneStore';
 
-const BUILDING_BOXES = [
-  { minX: -2.5, maxX: 5.5, minZ: 42, maxZ: 54 },
-  { minX: -22.5, maxX: -8.5, minZ: -74, maxZ: -60 },
-  { minX: -22.5, maxX: -8.5, minZ: -52, maxZ: -38 },
-  { minX: -22.5, maxX: -8.5, minZ: -38, maxZ: -28 },
-  { minX: -22.5, maxX: -8.5, minZ: -28, maxZ: -16 },
-  { minX: -22.5, maxX: -8.5, minZ: 16, maxZ: 31 },
-  { minX: -22.5, maxX: -8.5, minZ: 31, maxZ: 43 },
-  { minX: -22.5, maxX: -8.5, minZ: 43, maxZ: 55 },
-  { minX: -22.5, maxX: -8.5, minZ: 55, maxZ: 68 },
-  { minX: -22.5, maxX: -6.5, minZ: 74, maxZ: 89 },
-  { minX: 8.5, maxX: 25.5, minZ: -67, maxZ: -53 },
-  { minX: 8.5, maxX: 25.5, minZ: -52, maxZ: -39 },
-  { minX: 8.5, maxX: 25.5, minZ: -38, maxZ: -22 },
-  { minX: 8.5, maxX: 25.5, minZ: -21, maxZ: -8 },
-  { minX: 8.5, maxX: 25.5, minZ: -8, maxZ: 7 },
-  { minX: 8.5, maxX: 25.5, minZ: 4, maxZ: 16 },
-  { minX: 8.5, maxX: 25.5, minZ: 16, maxZ: 29 },
-  { minX: 8.5, maxX: 25.5, minZ: 29, maxZ: 41 },
-  { minX: 8.5, maxX: 25.5, minZ: 41, maxZ: 55 },
-];
+function isPositionBlocked(position: THREE.Vector3): boolean {
+  if (position.x <= -22.5 || position.x >= 25.5) return true;
+  if (position.z <= -78 || position.z >= 88) return true;
 
-function isPositionBlocked(x: number, z: number): boolean {
-  if (x <= -22.5 || x >= 25.5) return true;
-  if (z <= -78 || z >= 88) return true;
+  const playerBox = new THREE.Box3(
+    new THREE.Vector3(position.x - 0.3, position.y - 1.6, position.z - 0.3),
+    new THREE.Vector3(position.x + 0.3, position.y + 0.4, position.z + 0.3)
+  );
 
-  for (const box of BUILDING_BOXES) {
-    if (x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ) {
+  for (const collider of worldColliders) {
+    if (playerBox.intersectsBox(collider)) {
       return true;
     }
   }
@@ -41,13 +27,28 @@ export const FirstPersonController: React.FC = () => {
   const { camera, gl } = useThree();
   const moveState = useRef({ forward: false, backward: false, left: false, right: false });
   const rotationRef = useRef({ yaw: 0, pitch: 0 });
+  const controlsRef = useRef<any>(null);
+  const isPhoneOpen = usePhoneStore((s) => s.isOpen);
+
+  // Desbloquea el cursor del ratón cuando el celular está abierto para permitir clics
+  useEffect(() => {
+    if (isPhoneOpen && controlsRef.current) {
+      controlsRef.current.unlock();
+    }
+  }, [isPhoneOpen]);
 
   useEffect(() => {
+    camera.position.set(0, 1.6, 5);
+
     const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
     rotationRef.current.yaw = euler.y;
     rotationRef.current.pitch = euler.x;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Si se está escribiendo en una caja de texto del celular, no mover al personaje
+      const targetTag = (e.target as HTMLElement)?.tagName;
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA') return;
+
       if (e.code === 'KeyW' || e.code === 'ArrowUp') moveState.current.forward = true;
       if (e.code === 'KeyS' || e.code === 'ArrowDown') moveState.current.backward = true;
       if (e.code === 'KeyA' || e.code === 'ArrowLeft') moveState.current.left = true;
@@ -61,16 +62,16 @@ export const FirstPersonController: React.FC = () => {
       if (e.code === 'KeyD' || e.code === 'ArrowRight') moveState.current.right = false;
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('keyup', handleKeyUp, true);
+    
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('keyup', handleKeyUp, true);
     };
   }, [camera]);
 
   useFrame((_, delta) => {
-    // Si estamos en sesión VR (Oculus Rift S), dejamos que WebXR gestione la posición y rotación del HMD
     if (gl.xr.isPresenting) return;
 
     const speed = 10 * delta;
@@ -87,30 +88,24 @@ export const FirstPersonController: React.FC = () => {
       if (gp && gp.connected) {
         const leftStickX = gp.axes[0]; 
         const leftStickY = gp.axes[1]; 
-        
-        // Ejes estándar del stick derecho en controles de Xbox (2 = X, 3 = Y)
         const rawLookX = gp.axes[2]; 
         const rawLookY = gp.axes[3] !== undefined ? gp.axes[3] : gp.axes[5];
 
         if (Math.abs(leftStickX) > DEADZONE) gamepadX = leftStickX;
         if (Math.abs(leftStickY) > DEADZONE) gamepadZ = leftStickY;
-
         if (rawLookX !== undefined && Math.abs(rawLookX) > DEADZONE) gamepadLookX = rawLookX;
         if (rawLookY !== undefined && Math.abs(rawLookY) > DEADZONE) gamepadLookY = rawLookY;
-
         break;
       }
     }
 
-    // Sincronizamos con la rotación actual por si el usuario movió el mouse con PointerLockControls
     const currentEuler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
     rotationRef.current.yaw = currentEuler.y;
     rotationRef.current.pitch = currentEuler.x;
 
-    // Si se usa el stick derecho del control de Xbox, aplicamos el movimiento estilo Minecraft de forma limpia
     if (gamepadLookX !== 0 || gamepadLookY !== 0) {
-      rotationRef.current.yaw -= gamepadLookX * lookSpeed;   // Derecha/Izquierda del stick R
-      rotationRef.current.pitch -= gamepadLookY * lookSpeed; // Arriba/Abajo del stick R
+      rotationRef.current.yaw -= gamepadLookX * lookSpeed;
+      rotationRef.current.pitch -= gamepadLookY * lookSpeed;
 
       const maxPitch = Math.PI / 2.0 - 0.05;
       rotationRef.current.pitch = Math.max(-maxPitch, Math.min(maxPitch, rotationRef.current.pitch));
@@ -119,9 +114,6 @@ export const FirstPersonController: React.FC = () => {
       camera.quaternion.setFromEuler(targetEuler);
     }
 
-    // ===================================================
-    //  MOVIMIENTO DE TRASLACIÓN (Teclado + Stick Izquierdo)
-    // ===================================================
     const moveForward = (moveState.current.forward ? 1 : 0) - (moveState.current.backward ? 1 : 0) - gamepadZ;
     const moveSide = (moveState.current.right ? 1 : 0) - (moveState.current.left ? 1 : 0) + gamepadX;
 
@@ -139,19 +131,20 @@ export const FirstPersonController: React.FC = () => {
 
     direction.clampLength(0, 1).multiplyScalar(speed);
 
-    const nextX = camera.position.x + direction.x;
-    const nextZ = camera.position.z + direction.z;
-
-    if (!isPositionBlocked(nextX, camera.position.z)) {
-      camera.position.x = nextX;
+    const nextPos = camera.position.clone();
+    nextPos.x += direction.x;
+    if (!isPositionBlocked(nextPos)) {
+      camera.position.x = nextPos.x;
     }
-    if (!isPositionBlocked(camera.position.x, nextZ)) {
-      camera.position.z = nextZ;
+
+    const nextPosZ = camera.position.clone();
+    nextPosZ.z += direction.z;
+    if (!isPositionBlocked(nextPosZ)) {
+      camera.position.z = nextPosZ.z;
     }
 
     camera.position.y = 1.6;
   });
 
-  // Devolvemos PointerLockControls para que el mouse vuelva a funcionar al hacer clic en la pantalla
-  return <PointerLockControls />;
+  return <PointerLockControls ref={controlsRef} />;
 };
