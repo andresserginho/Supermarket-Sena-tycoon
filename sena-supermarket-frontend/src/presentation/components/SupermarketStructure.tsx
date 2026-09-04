@@ -1,5 +1,8 @@
-import React from 'react';
+// src/presentation/components/SupermarketStructure.tsx
+import React, { useEffect } from 'react';
 import { useGLTF } from '@react-three/drei';
+import * as THREE from 'three';
+import { addColliderFromMesh } from '../utils/colliders';
 
 const MODEL_PATHS = {
   floor: '/models/PisoMETA.glb',
@@ -11,16 +14,34 @@ const MODEL_PATHS = {
 interface SupermarketStructureProps {
   position: [number, number, number];
   unlockedZones?: number;
+  wallColor?: string;
 }
 
 export const SupermarketStructure: React.FC<SupermarketStructureProps> = ({ 
   position, 
-  unlockedZones = 1 
+  unlockedZones = 1,
+  wallColor = '#ffffff'
 }) => {
   const { scene: floor } = useGLTF(MODEL_PATHS.floor);
   const { scene: back } = useGLTF(MODEL_PATHS.wallBack);
   const { scene: side } = useGLTF(MODEL_PATHS.wallSide);
   const { scene: entry } = useGLTF(MODEL_PATHS.entrance);
+
+  useEffect(() => {
+    // Aplicar color personalizado a muros y extraer colisiones de geometría real
+    [back, side, entry].forEach((sceneModel) => {
+      sceneModel.traverse((child: any) => {
+        if (child.isMesh) {
+          child.material = new THREE.MeshStandardMaterial({
+            color: wallColor,
+            roughness: 0.5,
+          });
+          // Registrar la caja delimitadora real de la malla
+          addColliderFromMesh(child);
+        }
+      });
+    });
+  }, [back, side, entry, wallColor]);
 
   return (
     <group position={position}>
@@ -30,22 +51,11 @@ export const SupermarketStructure: React.FC<SupermarketStructureProps> = ({
 
         return (
           <group key={`zone-${i}`} position={[0, 0, zOffset]}>
-            {/* Piso */}
             <primitive object={floor.clone()} />
-
-            {/* Techo (Duplicado exacto del piso elevado en el eje Y, ej: altura 4 o la que necesites) */}
             <primitive object={floor.clone()} position={[0, 3.40, 0]} />
-
-            {/* Pared trasera */}
             <primitive object={side.clone()} position={[0, 0, 0]} />
-
-            {/* Pared Derecha */}
             <primitive object={back.clone()} position={[0, 0, 10]} />
-
-            {/* Pared lateral derecha */}
             <primitive object={back.clone()} position={[0, 0, 0]} />
-
-            {/* Pared Frontal con Puerta (Solo en la última sección activa) */}
             {isLast && <primitive object={entry.clone()} position={[0, 0, 0]} />}
           </group>
         );

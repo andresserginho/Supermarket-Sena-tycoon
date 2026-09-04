@@ -1,7 +1,10 @@
 import { create } from 'zustand';
-import { SimulationEngine, type PlayerState } from '../services/SimulationEngine';
-import type { ProgressPayload } from '../../infrastructure/api/progressApi';
+import { SimulationEngine, type PlayerState as EnginePlayerState, type ProgressState, type CashRegisterState, type CheckoutOutcome } from '../services/SimulationEngine';
+import { Checkout } from '../../domain/entities/Checkout';
+import type { Product } from '../../domain/entities/Product';
+
 const engine = new SimulationEngine();
+const checkout = new Checkout();
 
 export interface CartItem {
   id: string;
@@ -9,110 +12,142 @@ export interface CartItem {
   price: number;
 }
 
+export interface DeliveryItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+}
+
+export interface DeliveryBoxData {
+  id: string;
+  items: DeliveryItem[];
+  position: [number, number, number];
+  deliveryTimeGameHours?: number;
+}
+
+export interface PlayerState extends EnginePlayerState {
+  level?: number;
+}
+
 export interface SimulationStore {
-  // Estado reactivo del jugador
   playerState: PlayerState;
+  progressState: ProgressState;
+  cashRegisterState: CashRegisterState;
 
-  // Progreso persistente
-  level: number;
-  expansions: string[];
-
-  // Estado de caja registradora y economía para el HUD
   money: number;
   totalSalesCount: number;
   currentCart: CartItem[];
   checkoutTotal: number;
+  inventory: Record<string, number>;
+  deliveryBoxes: DeliveryBoxData[];
 
-  // Acciones de necesidades del jugador
+  setMoney: (money: number) => void;
+  addInventoryItem: (productId: string, quantity: number) => void;
+  addDeliveryBox: (box: DeliveryBoxData) => void;
+  removeDeliveryBox: (id: string) => void;
+
   handleCarImpact: (damage?: number) => void;
   consumeFood: (amount?: number) => void;
   consumeWater: (amount?: number) => void;
 
-  // Acciones de la caja registradora
-  addToCart: (item: CartItem) => void;
+  sleep: () => void;
+  registerCheckoutOutcome: (outcome: CheckoutOutcome, saleAmount?: number, changeDelta?: number) => void;
+
+  addToCart: (product: Product) => void;
   processPayment: () => void;
 
-  // Progreso persistente: cargar y serializar
-  hydrateProgress: (progress: ProgressPayload) => void;
-  serializeProgress: () => ProgressPayload;
-
-  // Motor de simulación desacoplado
   engine: SimulationEngine;
 }
 
-export const useSimulationStore = create<SimulationStore>((set, get) => ({
-  engine,
-  playerState: engine.getPlayerState(),
+function cartItemsFromCheckout(): CartItem[] {
+  return checkout.getItems().map((scanned) => ({
+    id: scanned.product.id,
+    name: scanned.product.name,
+    price: scanned.product.price,
+  }));
+}
 
-  level: 1,
-  expansions: [],
+export const useSimulationStore = create<SimulationStore>((set) => ({
+  engine,
+  playerState: {
+    ...engine.getPlayerState(),
+    level: 1,
+  },
+  progressState: engine.getProgressState(),
+  cashRegisterState: engine.getCashRegisterState(),
 
   money: 50000,
   totalSalesCount: 0,
   currentCart: [],
   checkoutTotal: 0,
+  inventory: {},
+  deliveryBoxes: [],
+
+  setMoney: (money: number) => set({ money }),
+
+  addInventoryItem: (productId: string, quantity: number) =>
+    set((state) => ({
+      inventory: {
+        ...state.inventory,
+        [productId]: (state.inventory[productId] || 0) + quantity,
+      },
+    })),
+
+  addDeliveryBox: (box: DeliveryBoxData) =>
+    set((state) => ({
+      deliveryBoxes: [...state.deliveryBoxes, box],
+    })),
+
+  removeDeliveryBox: (id: string) =>
+    set((state) => ({
+      deliveryBoxes: state.deliveryBoxes.filter((b) => b.id !== id),
+    })),
 
   handleCarImpact: (damage = 15) => {
-    const updatedState = engine.handleCarImpact(damage);
-    set({ playerState: updatedState });
+    set({ playerState: { ...engine.handleCarImpact(damage), level: 1 } });
   },
 
   consumeFood: (amount = 25) => {
-    const updatedState = engine.consumeItem('FOOD', amount);
-    set({ playerState: updatedState });
+    set({ playerState: { ...engine.consumeItem('FOOD', amount), level: 1 } });
   },
 
   consumeWater: (amount = 25) => {
-    const updatedState = engine.consumeItem('WATER', amount);
-    set({ playerState: updatedState });
+    set({ playerState: { ...engine.consumeItem('WATER', amount), level: 1 } });
   },
 
-  addToCart: (item: CartItem) => {
-    const updatedCart = [...get().currentCart, item];
-    const newTotal = updatedCart.reduce((sum, prod) => sum + prod.price, 0);
+  sleep: () => {
+    const { playerState, progressState } = engine.sleep();
+    set({ playerState: { ...playerState, level: 1 }, progressState });
+  },
+
+  registerCheckoutOutcome: (outcome, saleAmount = 0, changeDelta = 0) => {
+    const { progressState, cashRegisterState } = engine.registerCheckoutOutcome(outcome, saleAmount, changeDelta);
+    set({ progressState, cashRegisterState });
+  },
+
+  addToCart: (product: Product) => {
+    checkout.addItem(product);
     set({
-      currentCart: updatedCart,
-      checkoutTotal: newTotal,
+      currentCart: cartItemsFromCheckout(),
+      checkoutTotal: checkout.calculateTotal(),
     });
   },
 
   processPayment: () => {
-    const { currentCart, checkoutTotal, money, totalSalesCount } = get();
-    if (currentCart.length === 0) return;
+    if (checkout.getItems().length === 0) return;
 
-    set({
-      money: money + checkoutTotal,
-      totalSalesCount: totalSalesCount + 1,
+    const total = checkout.completeTransaction();
+    const { cashRegisterState, progressState } = engine.registerCheckoutOutcome('correct', total);
+
+    checkout.reset();
+
+    set((state) => ({
+      money: state.money + total,
+      totalSalesCount: state.totalSalesCount + 1,
       currentCart: [],
       checkoutTotal: 0,
-    });
-  },
-
-  hydrateProgress: (progress: ProgressPayload) => {
-    const updatedState = engine.setPlayerState({
-      health: progress.health,
-      hunger: progress.hunger,
-      thirst: progress.thirst,
-    });
-    set({
-      playerState: updatedState,
-      level: progress.level,
-      money: progress.money,
-      totalSalesCount: progress.sales,
-      expansions: progress.expansions,
-    });
-  },
-
-  serializeProgress: () => {
-    const { playerState, level, money, totalSalesCount, expansions } = get();
-    return {
-      level,
-      money,
-      sales: totalSalesCount,
-      health: playerState.health,
-      hunger: playerState.hunger,
-      thirst: playerState.thirst,
-      expansions,
-    };
+      cashRegisterState,
+      progressState,
+    }));
   },
 }));
