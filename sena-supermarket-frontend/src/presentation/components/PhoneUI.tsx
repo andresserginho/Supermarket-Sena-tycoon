@@ -11,7 +11,7 @@ export interface DeliveryItem {
   quantity: number;
 }
 
-type TabType = 'estado' | 'productos' | 'inventario' | 'muebles' | 'chats' | 'banco';
+type TabType = 'muebles' | 'estado' | 'productos' | 'inventario' | 'chats' | 'banco';
 
 interface ProductCatalog {
   id: string;
@@ -19,6 +19,22 @@ interface ProductCatalog {
   unitPrice: number;
   boxUnits: number;
   icon: string;
+}
+
+interface FurnitureCatalog {
+  id: string;
+  name: string;
+  model: string;
+  buyPrice: number;
+  sellPrice: number;
+  icon: string;
+  canChangeColor: boolean;
+}
+
+interface OwnedFurniture {
+  uid: string;
+  catalogId: string;
+  color?: string;
 }
 
 interface ChatOption {
@@ -92,17 +108,17 @@ const chatPool: ChatMessage[] = [
   },
 ];
 
+const catalogFurniture: FurnitureCatalog[] = [
+  { id: 'mueble_caja', name: 'Caja Registradora', model: '/models/mesa caja registradora.glb', buyPrice: 50000, sellPrice: 40000, icon: '🖥️', canChangeColor: true },
+  { id: 'mueble_estante', name: 'Estante Individual', model: '/models/estante individual.glb', buyPrice: 25000, sellPrice: 20000, icon: '🗄️', canChangeColor: false },
+];
+
 const catalogProducts: ProductCatalog[] = [
   { id: 'prod_leche', name: 'Leche Entera 1L', unitPrice: 3800, boxUnits: 6, icon: '🥛' },
   { id: 'prod_pan', name: 'Pan Tajado Familiar', unitPrice: 4500, boxUnits: 8, icon: '🍞' },
   { id: 'prod_arroz', name: 'Arroz Diana 1 kg', unitPrice: 4200, boxUnits: 12, icon: '🌾' },
   { id: 'prod_aceite', name: 'Aceite Vegetal 900ml', unitPrice: 9800, boxUnits: 6, icon: '🍾' },
   { id: 'prod_huevos', name: 'Cubeta Huevos x30', unitPrice: 16000, boxUnits: 4, icon: '🥚' },
-];
-
-const catalogFurniture = [
-  { id: 'mueble_estante', name: 'Estante Exhibidor', component: 'ShelfProduct.tsx', price: 180000, icon: '🗄️' },
-  { id: 'mueble_caja', name: 'Módulo Caja POS', component: 'CashRegisterCounter.tsx', price: 450000, icon: '🖥️' },
 ];
 
 const bankOffers: BankLoanOffer[] = [
@@ -124,12 +140,16 @@ export const PhoneUI: React.FC = () => {
   const addDeliveryBox = store.addDeliveryBox;
   const deliveryBoxes = store.deliveryBoxes || [];
 
+  const furnitureInventory: OwnedFurniture[] = store.furnitureInventory || [];
+  const setFurnitureInventory = store.setFurnitureInventory || ((inv: any) => useSimulationStore.setState({ furnitureInventory: inv } as any));
+
   const activeLoan = store.activeLoan || null;
   const setActiveLoan = store.setActiveLoan || ((loan: any) => useSimulationStore.setState({ activeLoan: loan } as any));
 
   const { hours, minutes } = useGameTime();
 
-  const [activeTab, setActiveTab] = useState<TabType>('productos');
+  const [activeTab, setActiveTab] = useState<TabType>('muebles');
+  const [menuOpen, setMenuOpen] = useState(false);
   const [recovering, setRecovering] = useState(false);
   const [recoveryError, setRecoveryError] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
@@ -195,9 +215,7 @@ export const PhoneUI: React.FC = () => {
     const updateClock = () => {
       const h = Math.floor(hours) % 24;
       const m = Math.floor((hours % 1) * 60) || Math.floor(minutes % 60);
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const displayH = h % 12 === 0 ? 12 : h % 12;
-      setLiveTime(`${displayH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${ampm}`);
+      setLiveTime(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
     };
     updateClock();
     const timer = setInterval(updateClock, 250);
@@ -362,6 +380,50 @@ export const PhoneUI: React.FC = () => {
     setSalePrices((prev) => ({ ...prev, [id]: num }));
   };
 
+  const handleBuyFurniture = (item: FurnitureCatalog) => {
+    if (money < item.buyPrice) {
+      triggerNotification('⚠️ Fondos insuficientes para este mueble.');
+      return;
+    }
+    if (setMoney) setMoney(money - item.buyPrice);
+
+    const newFurniture: OwnedFurniture = {
+      uid: `furn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      catalogId: item.id,
+      color: item.canChangeColor ? '#ffffff' : undefined,
+    };
+    setFurnitureInventory([...furnitureInventory, newFurniture]);
+    triggerNotification(`✅ Compraste: ${item.name}`);
+  };
+
+  const handleSellFurniture = (uid: string) => {
+    const item = furnitureInventory.find((f) => f.uid === uid);
+    if (!item) return;
+    const catalogItem = catalogFurniture.find((c) => c.id === item.catalogId);
+    if (!catalogItem) return;
+
+    if (setMoney) setMoney(money + catalogItem.sellPrice);
+    setFurnitureInventory(furnitureInventory.filter((f) => f.uid !== uid));
+    triggerNotification(`💰 Vendido por $${catalogItem.sellPrice.toLocaleString()}`);
+  };
+
+  const handleSpawnFurniture = (item: OwnedFurniture) => {
+    const catalogItem = catalogFurniture.find((c) => c.id === item.catalogId);
+    if (!catalogItem) return;
+
+    useSimulationStore.setState({
+      holdingFurniture: { ...item, model: catalogItem.model },
+    } as any);
+    close();
+    triggerNotification('📍 Haz clic para colocar el mueble al ras del piso.');
+  };
+
+  const handleUpdateFurnitureColor = (uid: string, newColor: string) => {
+    setFurnitureInventory(
+      furnitureInventory.map((f) => (f.uid === uid ? { ...f, color: newColor } : f))
+    );
+  };
+
   if (!isOpen) return null;
 
   const currentHealth = Math.max(0, Math.min(100, playerState?.health ?? 100));
@@ -369,7 +431,12 @@ export const PhoneUI: React.FC = () => {
 
   return (
     <>
-      <style>{`.no-scrollbar::-webkit-scrollbar { display: none !important; } .no-scrollbar { -ms-overflow-style: none !important; scrollbar-width: none !important; }`}</style>
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar { display: none !important; } 
+        .no-scrollbar { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+        .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 8px; }
+      `}</style>
+
       <div
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
@@ -396,16 +463,82 @@ export const PhoneUI: React.FC = () => {
           <span style={{ color: '#4ade80', fontWeight: 'bold' }}>${money.toLocaleString()}</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '2px', margin: '8px 0' }}>
-          <button onClick={() => setActiveTab('estado')} style={{ background: activeTab === 'estado' ? '#38bdf8' : '#1e293b', color: activeTab === 'estado' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>Estado</button>
-          <button onClick={() => setActiveTab('productos')} style={{ background: activeTab === 'productos' ? '#38bdf8' : '#1e293b', color: activeTab === 'productos' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>Prod</button>
-          <button onClick={() => setActiveTab('inventario')} style={{ background: activeTab === 'inventario' ? '#38bdf8' : '#1e293b', color: activeTab === 'inventario' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>Inv</button>
-          <button onClick={() => setActiveTab('muebles')} style={{ background: activeTab === 'muebles' ? '#38bdf8' : '#1e293b', color: activeTab === 'muebles' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>Muebl</button>
-          <button onClick={() => setActiveTab('chats')} style={{ background: activeTab === 'chats' ? '#22c55e' : '#1e293b', color: activeTab === 'chats' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>💬 Chat</button>
-          <button onClick={() => setActiveTab('banco')} style={{ background: activeTab === 'banco' ? '#f59e0b' : '#1e293b', color: activeTab === 'banco' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>🏦 Banco</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0', position: 'relative' }}>
+          <button 
+            onClick={() => setMenuOpen(!menuOpen)} 
+            style={{ background: '#1e293b', color: '#fff', border: '1px solid #334155', padding: '6px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            ☰ <span>Menú</span>
+          </button>
+          <div style={{ fontSize: '10px', color: '#38bdf8', fontWeight: 'bold', textTransform: 'uppercase' }}>
+            {activeTab}
+          </div>
         </div>
 
+        {menuOpen && (
+          <div style={{
+            position: 'absolute', top: '75px', left: '12px', width: '180px',
+            background: '#0f172a', border: '1px solid #334155', borderRadius: '8px',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.9)', zIndex: 200, display: 'flex', flexDirection: 'column', padding: '6px', gap: '4px'
+          }}>
+            <button onClick={() => { setActiveTab('muebles'); setMenuOpen(false); }} style={{ background: activeTab === 'muebles' ? '#38bdf8' : 'transparent', color: activeTab === 'muebles' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>🪑 Muebles</button>
+            <button onClick={() => { setActiveTab('productos'); setMenuOpen(false); }} style={{ background: activeTab === 'productos' ? '#38bdf8' : 'transparent', color: activeTab === 'productos' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>📦 Productos</button>
+            <button onClick={() => { setActiveTab('inventario'); setMenuOpen(false); }} style={{ background: activeTab === 'inventario' ? '#38bdf8' : 'transparent', color: activeTab === 'inventario' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>📋 Inventario</button>
+            <button onClick={() => { setActiveTab('estado'); setMenuOpen(false); }} style={{ background: activeTab === 'estado' ? '#38bdf8' : 'transparent', color: activeTab === 'estado' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>❤️ Estado</button>
+            <button onClick={() => { setActiveTab('chats'); setMenuOpen(false); }} style={{ background: activeTab === 'chats' ? '#22c55e' : 'transparent', color: activeTab === 'chats' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>💬 Chats</button>
+            <button onClick={() => { setActiveTab('banco'); setMenuOpen(false); }} style={{ background: activeTab === 'banco' ? '#f59e0b' : 'transparent', color: activeTab === 'banco' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>🏦 Banco</button>
+          </div>
+        )}
+
         <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          
+          {activeTab === 'muebles' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 'bold' }}>INVENTARIO DE MUEBLES</div>
+              {furnitureInventory.length === 0 ? (
+                <div style={{ fontSize: '9px', color: '#64748b', textAlign: 'center', padding: '10px' }}>No tienes muebles en propiedad.</div>
+              ) : (
+                furnitureInventory.map((item) => {
+                  const catalogData = catalogFurniture.find((c) => c.id === item.catalogId);
+                  if (!catalogData) return null;
+                  return (
+                    <div key={item.uid} className="glass-card">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: '9.5px', fontWeight: 'bold' }}>{catalogData.icon} {catalogData.name}</div>
+                        <button onClick={() => handleSpawnFurniture(item)} style={{ background: '#22c55e', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '8.5px', fontWeight: 'bold', cursor: 'pointer' }}>Colocar</button>
+                      </div>
+
+                      {catalogData.canChangeColor && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                          <span style={{ fontSize: '8.5px', color: '#94a3b8' }}>Color Caja:</span>
+                          <input type="color" value={item.color || '#ffffff'} onChange={(e) => handleUpdateFurnitureColor(item.uid, e.target.value)} style={{ width: '20px', height: '20px', padding: 0, border: 'none', borderRadius: '3px', cursor: 'pointer' }} />
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '4px' }}>
+                        <span style={{ fontSize: '8px', color: '#94a3b8' }}>Venta: <b style={{ color: '#facc15' }}>${catalogData.sellPrice.toLocaleString()}</b></span>
+                        <button onClick={() => handleSellFurniture(item.uid)} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '2px 6px', borderRadius: '3px', fontSize: '8px', cursor: 'pointer' }}>Vender</button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 'bold', marginTop: '6px' }}>TIENDA DE MUEBLES</div>
+              {catalogFurniture.map((f) => (
+                <div key={f.id} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '9.5px', fontWeight: 'bold' }}>{f.icon} {f.name}</div>
+                    <div style={{ fontSize: '8.5px', color: '#38bdf8', marginTop: '1px' }}>$ {f.buyPrice.toLocaleString()}</div>
+                  </div>
+                  <button onClick={() => handleBuyFurniture(f)} style={{ background: '#38bdf8', color: '#000', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 'bold', cursor: 'pointer' }}>
+                    Comprar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {activeTab === 'estado' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px' }}>
@@ -501,22 +634,6 @@ export const PhoneUI: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'muebles' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {catalogFurniture.map((f) => (
-                <div key={f.id} style={{ background: '#1e293b', padding: '6px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: '9px', fontWeight: 'bold' }}>{f.icon} {f.name}</div>
-                    <div style={{ fontSize: '8px', color: '#94a3b8' }}>{f.component}</div>
-                  </div>
-                  <button onClick={() => { if (money >= f.price) { if (typeof setMoney === 'function') setMoney(money - f.price); triggerNotification(`Comprado ${f.name}`); } else alert('Fondos insuficientes'); }} style={{ background: '#38bdf8', color: '#000', border: 'none', padding: '4px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    $ {f.price.toLocaleString()}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
           {activeTab === 'chats' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {activeChats.map((chat) => (
@@ -589,6 +706,7 @@ export const PhoneUI: React.FC = () => {
               )}
             </div>
           )}
+
         </div>
 
         <button onClick={close} style={{ background: '#334155', color: '#ffffff', border: 'none', padding: '6px', borderRadius: '6px', fontWeight: 'bold', fontSize: '10px', cursor: 'pointer', marginTop: '6px' }}>

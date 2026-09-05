@@ -5,7 +5,6 @@ import { FirstPersonController } from '../components/FirstPersonController';
 import { Crosshair } from '../components/Crosshair';
 import { PhoneUI } from '../components/PhoneUI';
 import { HeldPhone3D } from '../components/HeldPhone3D';
-import { CashRegisterCounter } from '../components/CashRegisterCounter';
 import { DayNightCycle } from '../components/DayNightCycle';
 import { StreetLights } from '../components/StreetLights';
 import { DeliveryBoxes } from '../components/DeliveryBox';
@@ -60,7 +59,7 @@ export const SupermarketScene: React.FC = () => {
         <SupermarketEnvironment onPlayerHit={handlePlayerHit} />
         <FirstPersonController />
         <HeldPhone3D />
-        <CashRegisterCounter position={[-16, 0, 5]} />
+        
 
         {/* Renderizador de Cajas de Pedidos dentro del entorno 3D */}
         <DeliveryBoxes />
