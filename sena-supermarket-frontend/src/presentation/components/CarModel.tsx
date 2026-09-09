@@ -3,7 +3,7 @@ import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Soporte para archivos .glb comprimidos con Draco desde Blender
-useGLTF.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.5/gltf/');
+useGLTF.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
 
 interface CarModelProps {
   modelPath: string;

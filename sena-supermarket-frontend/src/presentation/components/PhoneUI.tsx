@@ -1,9 +1,9 @@
-// src/presentation/components/PhoneUI.tsx
 import React, { useState, useEffect } from 'react';
 import { usePhoneStore } from '../../application/store/usePhoneStore';
 import { useSimulationStore } from '../../application/store/useSimulationStore';
 import { recoverHealth } from '../../infrastructure/api/progressApi';
 import { useGameTime } from '../hooks/useGameTime';
+import { MODELOS_3D } from '../../application/data/modelosUrls';
 
 export interface DeliveryItem {
   productId: string;
@@ -11,7 +11,7 @@ export interface DeliveryItem {
   quantity: number;
 }
 
-type TabType = 'estado' | 'productos' | 'inventario' | 'muebles' | 'chats' | 'banco';
+type TabType = 'muebles' | 'estado' | 'productos' | 'inventario' | 'chats' | 'banco';
 
 interface ProductCatalog {
   id: string;
@@ -19,6 +19,22 @@ interface ProductCatalog {
   unitPrice: number;
   boxUnits: number;
   icon: string;
+}
+
+interface FurnitureCatalog {
+  id: string;
+  name: string;
+  model: string;
+  buyPrice: number;
+  sellPrice: number;
+  icon: string;
+  canChangeColor: boolean;
+}
+
+interface OwnedFurniture {
+  uid: string;
+  catalogId: string;
+  color?: string;
 }
 
 interface ChatOption {
@@ -92,17 +108,17 @@ const chatPool: ChatMessage[] = [
   },
 ];
 
+const catalogFurniture: FurnitureCatalog[] = [
+  { id: 'mueble_caja', name: 'Caja Registradora', model: MODELOS_3D.mesaCajaRegistradora, buyPrice: 50000, sellPrice: 40000, icon: '🖥️', canChangeColor: true },
+  { id: 'mueble_estante', name: 'Estante Individual', model: MODELOS_3D.estanteIndividual, buyPrice: 25000, sellPrice: 20000, icon: '🗄️', canChangeColor: true },
+];
+
 const catalogProducts: ProductCatalog[] = [
   { id: 'prod_leche', name: 'Leche Entera 1L', unitPrice: 3800, boxUnits: 6, icon: '🥛' },
   { id: 'prod_pan', name: 'Pan Tajado Familiar', unitPrice: 4500, boxUnits: 8, icon: '🍞' },
   { id: 'prod_arroz', name: 'Arroz Diana 1 kg', unitPrice: 4200, boxUnits: 12, icon: '🌾' },
   { id: 'prod_aceite', name: 'Aceite Vegetal 900ml', unitPrice: 9800, boxUnits: 6, icon: '🍾' },
   { id: 'prod_huevos', name: 'Cubeta Huevos x30', unitPrice: 16000, boxUnits: 4, icon: '🥚' },
-];
-
-const catalogFurniture = [
-  { id: 'mueble_estante', name: 'Estante Exhibidor', component: 'ShelfProduct.tsx', price: 180000, icon: '🗄️' },
-  { id: 'mueble_caja', name: 'Módulo Caja POS', component: 'CashRegisterCounter.tsx', price: 450000, icon: '🖥️' },
 ];
 
 const bankOffers: BankLoanOffer[] = [
@@ -115,21 +131,23 @@ export const PhoneUI: React.FC = () => {
   const { isOpen, close } = usePhoneStore();
   const store = useSimulationStore() as any;
 
-  const money = store.money ?? 0;
+  const money = store.money !== undefined ? store.money : 50000;
   const totalSalesCount = store.totalSalesCount ?? 0;
   
   const playerState = store.playerState || { level: 1, health: 100, hunger: 100 };
   const inventory = (store.inventory || {}) as Record<string, number>;
-  const setMoney = store.setMoney;
   const addDeliveryBox = store.addDeliveryBox;
-  const deliveryBoxes = store.deliveryBoxes || [];
+
+  const furnitureInventory: OwnedFurniture[] = store.furnitureInventory || [];
+  const setFurnitureInventory = (inv: any) => useSimulationStore.setState({ furnitureInventory: inv } as any);
 
   const activeLoan = store.activeLoan || null;
-  const setActiveLoan = store.setActiveLoan || ((loan: any) => useSimulationStore.setState({ activeLoan: loan } as any));
+  const setActiveLoan = (loan: any) => useSimulationStore.setState({ activeLoan: loan } as any);
 
   const { hours, minutes } = useGameTime();
 
   const [activeTab, setActiveTab] = useState<TabType>('productos');
+  const [menuOpen, setMenuOpen] = useState(false);
   const [recovering, setRecovering] = useState(false);
   const [recoveryError, setRecoveryError] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
@@ -141,6 +159,10 @@ export const PhoneUI: React.FC = () => {
   const [lastTrackedHour, setLastTrackedHour] = useState<number>(hours);
   const [lastProcessedDay, setLastProcessedDay] = useState<number>(-1);
   const [liveTime, setLiveTime] = useState('');
+
+  const updateMoney = (newAmount: number) => {
+    useSimulationStore.setState({ money: Math.max(0, newAmount) } as any);
+  };
 
   const loadNewRandomChats = () => {
     const shuffled = [...chatPool].sort(() => 0.5 - Math.random());
@@ -166,7 +188,7 @@ export const PhoneUI: React.FC = () => {
     if (activeLoan && currentDay !== lastProcessedDay && lastProcessedDay !== -1) {
       setLastProcessedDay(currentDay);
       if (money >= activeLoan.dailyInstallment) {
-        setMoney(money - activeLoan.dailyInstallment);
+        updateMoney(money - activeLoan.dailyInstallment);
         const newRemainingDebt = activeLoan.remainingDebt - activeLoan.dailyInstallment;
         if (newRemainingDebt <= 0) {
           setActiveLoan(null);
@@ -180,10 +202,10 @@ export const PhoneUI: React.FC = () => {
         const newLevel = Math.max(1, currentLevel - 1);
         const penaltyTotal = activeLoan.penaltyFee;
         
-        setMoney(Math.max(0, money - penaltyTotal));
+        updateMoney(money - penaltyTotal);
         useSimulationStore.setState({
           playerState: { ...playerState, level: newLevel }
-        });
+        } as any);
         triggerNotification(`⚠️ ¡MOROSIDAD! No tenías para la cuota. Perdiste 1 Nivel y multa de -$${penaltyTotal.toLocaleString()}`);
       }
     } else if (lastProcessedDay === -1) {
@@ -195,9 +217,7 @@ export const PhoneUI: React.FC = () => {
     const updateClock = () => {
       const h = Math.floor(hours) % 24;
       const m = Math.floor((hours % 1) * 60) || Math.floor(minutes % 60);
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const displayH = h % 12 === 0 ? 12 : h % 12;
-      setLiveTime(`${displayH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${ampm}`);
+      setLiveTime(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
     };
     updateClock();
     const timer = setInterval(updateClock, 250);
@@ -231,13 +251,12 @@ export const PhoneUI: React.FC = () => {
       return;
     }
 
-    if (typeof setMoney === 'function') setMoney(money - totalCartCost);
+    const newMoney = money - totalCartCost;
 
     const updatedInventory = { ...inventory };
     Object.entries(cart).forEach(([prodId, qty]) => {
       updatedInventory[prodId] = (updatedInventory[prodId] || 0) + qty;
     });
-    useSimulationStore.setState({ inventory: updatedInventory } as any);
 
     const allItems: DeliveryItem[] = [];
     Object.entries(cart).forEach(([prodId, qty]) => {
@@ -268,28 +287,50 @@ export const PhoneUI: React.FC = () => {
 
     if (currentBoxItems.length > 0) boxesToCreate.push(currentBoxItems);
 
-    const existingCount = deliveryBoxes.length;
-    boxesToCreate.forEach((boxItems, idx) => {
-      const globalIdx = existingCount + idx;
-      const col = globalIdx % 4;
-      const isTopStack = Math.floor(globalIdx / 4) % 2 === 1;
+    const currentBoxes = store.deliveryBoxes || [];
+    const totalSpawned = store.totalSpawnedBoxes ?? currentBoxes.length;
 
-      const posX = -1.2 + col * 0.55;
-      const posY = isTopStack ? 0.32 : 0.0;
-      const posZ = -3.8;
+    boxesToCreate.forEach((boxItems, idx) => {
+      const globalIdx = totalSpawned + idx;
+      const maxPerRow = 3;
+      const row = Math.floor(globalIdx / maxPerRow) % 2;
+      const stackLevel = Math.floor(globalIdx / 6);
+      const col = globalIdx % maxPerRow;
+
+      // Posición del andén, fuera de la carretera
+      const posX = -7.4 + (col * 0.55);
+      const posY = 0.081 + (stackLevel * 0.32);
+      const posZ = 0.8 + (row * 0.55);
+
+      const newBox = {
+        id: `box_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
+        items: boxItems,
+        position: [posX, posY, posZ] as [number, number, number],
+        deliveryTimeGameHours: hours,
+      };
 
       if (typeof addDeliveryBox === 'function') {
-        addDeliveryBox({
-          id: `box_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
-          items: boxItems,
-          position: [posX, posY, posZ],
-          deliveryTimeGameHours: hours,
-        });
+        try {
+          addDeliveryBox(boxItems, [posX, posY, posZ]);
+        } catch {
+          addDeliveryBox(newBox);
+        }
+      } else {
+        const existingBoxes = useSimulationStore.getState().deliveryBoxes || [];
+        useSimulationStore.setState({
+          deliveryBoxes: [...existingBoxes, newBox],
+        } as any);
       }
     });
 
+    useSimulationStore.setState({
+      money: newMoney,
+      inventory: updatedInventory,
+      totalSpawnedBoxes: totalSpawned + boxesToCreate.length,
+    } as any);
+
     setCart({});
-    triggerNotification(`📦 Pedido realizado y añadido al inventario.`);
+    triggerNotification(`📦 ¡Pedido realizado! Caja de entrega generada.`);
   };
 
   const handleAnswerChat = (chatId: string, optionIdx: number) => {
@@ -297,7 +338,7 @@ export const PhoneUI: React.FC = () => {
       prev.map((chat) => {
         if (chat.id !== chatId) return chat;
         const selected = chat.options[optionIdx];
-        if (typeof setMoney === 'function') setMoney(money + selected.reward);
+        updateMoney(money + selected.reward);
         triggerNotification(selected.feedback);
         return { ...chat, answered: true, statusText: selected.feedback, isPositive: selected.isCorrect };
       })
@@ -313,7 +354,10 @@ export const PhoneUI: React.FC = () => {
     try {
       setRecovering(true); setRecoveryError('');
       const updatedUser = await recoverHealth('1');
-      useSimulationStore.setState({ playerState: { ...useSimulationStore.getState().playerState, health: updatedUser.health ?? 100 } });
+      const currentState = useSimulationStore.getState() as any;
+      useSimulationStore.setState({
+        playerState: { ...currentState.playerState, health: updatedUser.health ?? 100 }
+      } as any);
     } catch (err: any) {
       setRecoveryError(err.message || 'Error al curarse');
     } finally {
@@ -332,7 +376,7 @@ export const PhoneUI: React.FC = () => {
       return;
     }
 
-    setMoney(money + offer.loanAmount);
+    updateMoney(money + offer.loanAmount);
     setActiveLoan({
       bankName: offer.bankName,
       totalDebt: offer.loanAmount * 1.3,
@@ -362,6 +406,58 @@ export const PhoneUI: React.FC = () => {
     setSalePrices((prev) => ({ ...prev, [id]: num }));
   };
 
+  const handleBuyFurniture = (item: FurnitureCatalog) => {
+    if (money < item.buyPrice) {
+      triggerNotification('⚠️ Fondos insuficientes para este mueble.');
+      return;
+    }
+    updateMoney(money - item.buyPrice);
+
+    const newFurniture: OwnedFurniture = {
+      uid: `furn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      catalogId: item.id,
+      color: item.canChangeColor ? '#ffffff' : undefined,
+    };
+    setFurnitureInventory([...furnitureInventory, newFurniture]);
+    triggerNotification(`✅ Compraste: ${item.name}`);
+  };
+
+  const handleSellFurniture = (uid: string) => {
+    const item = furnitureInventory.find((f) => f.uid === uid);
+    if (!item) return;
+    const catalogItem = catalogFurniture.find((c) => c.id === item.catalogId);
+    if (!catalogItem) return;
+
+    updateMoney(money + catalogItem.sellPrice);
+    setFurnitureInventory(furnitureInventory.filter((f) => f.uid !== uid));
+    const currentPlaced = (useSimulationStore.getState() as any).placedFurniture || [];
+    useSimulationStore.setState({
+      placedFurniture: currentPlaced.filter((f: any) => f.uid !== uid),
+    } as any);
+    triggerNotification(`💰 Vendido por $${catalogItem.sellPrice.toLocaleString()}`);
+  };
+
+  const handleSpawnFurniture = (item: OwnedFurniture) => {
+    const catalogItem = catalogFurniture.find((c) => c.id === item.catalogId);
+    if (!catalogItem) return;
+
+    useSimulationStore.setState({
+      holdingFurniture: { ...item, model: catalogItem.model },
+    } as any);
+    close();
+    triggerNotification('📍 Haz clic para colocar el mueble al ras del piso.');
+  };
+
+  const handleUpdateFurnitureColor = (uid: string, newColor: string) => {
+    setFurnitureInventory(
+      furnitureInventory.map((f) => (f.uid === uid ? { ...f, color: newColor } : f))
+    );
+    const currentPlaced = (useSimulationStore.getState() as any).placedFurniture || [];
+    useSimulationStore.setState({
+      placedFurniture: currentPlaced.map((f: any) => (f.uid === uid ? { ...f, color: newColor } : f)),
+    } as any);
+  };
+
   if (!isOpen) return null;
 
   const currentHealth = Math.max(0, Math.min(100, playerState?.health ?? 100));
@@ -369,7 +465,12 @@ export const PhoneUI: React.FC = () => {
 
   return (
     <>
-      <style>{`.no-scrollbar::-webkit-scrollbar { display: none !important; } .no-scrollbar { -ms-overflow-style: none !important; scrollbar-width: none !important; }`}</style>
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar { display: none !important; } 
+        .no-scrollbar { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+        .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 8px; }
+      `}</style>
+
       <div
         onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
@@ -379,8 +480,9 @@ export const PhoneUI: React.FC = () => {
           background: '#090d16', borderRadius: '20px', border: '3px solid #1e293b',
           boxShadow: '0 20px 40px rgba(0,0,0,0.8)', color: '#ffffff',
           fontFamily: 'system-ui, -apple-system, sans-serif', padding: '12px',
-          display: 'flex', flexDirection: 'column', boxSizing: 'border-box', zIndex: 100,
-          userSelect: 'none', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0) scale(1)' : 'translateY(15px) scale(0.98)',
+          display: 'flex', flexDirection: 'column', boxSizing: 'border-box', zIndex: 10000,
+          pointerEvents: 'auto', userSelect: 'none',
+          opacity: visible ? 1 : 0, transform: visible ? 'translateY(0) scale(1)' : 'translateY(15px) scale(0.98)',
           transition: 'opacity 0.2s ease-out, transform 0.2s ease-out',
         }}
       >
@@ -396,45 +498,35 @@ export const PhoneUI: React.FC = () => {
           <span style={{ color: '#4ade80', fontWeight: 'bold' }}>${money.toLocaleString()}</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '2px', margin: '8px 0' }}>
-          <button onClick={() => setActiveTab('estado')} style={{ background: activeTab === 'estado' ? '#38bdf8' : '#1e293b', color: activeTab === 'estado' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>Estado</button>
-          <button onClick={() => setActiveTab('productos')} style={{ background: activeTab === 'productos' ? '#38bdf8' : '#1e293b', color: activeTab === 'productos' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>Prod</button>
-          <button onClick={() => setActiveTab('inventario')} style={{ background: activeTab === 'inventario' ? '#38bdf8' : '#1e293b', color: activeTab === 'inventario' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>Inv</button>
-          <button onClick={() => setActiveTab('muebles')} style={{ background: activeTab === 'muebles' ? '#38bdf8' : '#1e293b', color: activeTab === 'muebles' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>Muebl</button>
-          <button onClick={() => setActiveTab('chats')} style={{ background: activeTab === 'chats' ? '#22c55e' : '#1e293b', color: activeTab === 'chats' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>💬 Chat</button>
-          <button onClick={() => setActiveTab('banco')} style={{ background: activeTab === 'banco' ? '#f59e0b' : '#1e293b', color: activeTab === 'banco' ? '#000' : '#fff', border: 'none', padding: '5px 1px', borderRadius: '4px', fontSize: '7.5px', fontWeight: 'bold', cursor: 'pointer' }}>🏦 Banco</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0', position: 'relative' }}>
+          <button 
+            onClick={() => setMenuOpen(!menuOpen)} 
+            style={{ background: '#1e293b', color: '#fff', border: '1px solid #334155', padding: '6px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            ☰ <span>Menú</span>
+          </button>
+          <div style={{ fontSize: '10px', color: '#38bdf8', fontWeight: 'bold', textTransform: 'uppercase' }}>
+            {activeTab}
+          </div>
         </div>
 
-        <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {activeTab === 'estado' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '9px', color: '#94a3b8', marginBottom: '4px' }}>❤️ Salud ({currentHealth}%)</div>
-                <div style={{ width: '100%', height: '5px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ width: `${currentHealth}%`, height: '100%', background: currentHealth > 20 ? '#38bdf8' : '#ef4444' }} />
-                </div>
-              </div>
-              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '9px', color: '#94a3b8', marginBottom: '4px' }}>🍗 Hambre ({playerState?.hunger ?? 100}%)</div>
-                <div style={{ width: '100%', height: '5px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ width: `${playerState?.hunger ?? 100}%`, height: '100%', background: '#fb923c' }} />
-                </div>
-              </div>
-              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: '9px', color: '#94a3b8' }}>📦 Ventas Totales</div>
-                <div style={{ fontSize: '10px', color: '#4ade80', fontWeight: 'bold' }}>{totalSalesCount} unds</div>
-              </div>
-              {isDead && (
-                <div>
-                  {recoveryError && <div style={{ fontSize: '8.5px', color: '#f87171', marginBottom: '4px' }}>{recoveryError}</div>}
-                  <button onClick={handleRecoverHealth} disabled={recovering} style={{ width: '100%', background: '#dc2626', color: '#fff', border: 'none', padding: '6px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    {recovering ? 'Procesando...' : '🏥 Curarse'}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+        {menuOpen && (
+          <div style={{
+            position: 'absolute', top: '75px', left: '12px', width: '180px',
+            background: '#0f172a', border: '1px solid #334155', borderRadius: '8px',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.9)', zIndex: 200, display: 'flex', flexDirection: 'column', padding: '6px', gap: '4px'
+          }}>
+            <button onClick={() => { setActiveTab('estado'); setMenuOpen(false); }} style={{ background: activeTab === 'estado' ? '#38bdf8' : 'transparent', color: activeTab === 'estado' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>❤️ Salud</button>
+            <button onClick={() => { setActiveTab('productos'); setMenuOpen(false); }} style={{ background: activeTab === 'productos' ? '#38bdf8' : 'transparent', color: activeTab === 'productos' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>📦 Productos</button>
+            <button onClick={() => { setActiveTab('inventario'); setMenuOpen(false); }} style={{ background: activeTab === 'inventario' ? '#38bdf8' : 'transparent', color: activeTab === 'inventario' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>📋 Inventario</button>
+            <button onClick={() => { setActiveTab('muebles'); setMenuOpen(false); }} style={{ background: activeTab === 'muebles' ? '#38bdf8' : 'transparent', color: activeTab === 'muebles' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>🪑 Muebles</button>
+            <button onClick={() => { setActiveTab('chats'); setMenuOpen(false); }} style={{ background: activeTab === 'chats' ? '#22c55e' : 'transparent', color: activeTab === 'chats' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>💬 Chats</button>
+            <button onClick={() => { setActiveTab('banco'); setMenuOpen(false); }} style={{ background: activeTab === 'banco' ? '#f59e0b' : 'transparent', color: activeTab === 'banco' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>🏦 Banco</button>
+          </div>
+        )}
 
+        <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          
           {activeTab === 'productos' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               {catalogProducts.map((p) => {
@@ -461,6 +553,53 @@ export const PhoneUI: React.FC = () => {
                   Hacer Pedido ($ {totalCartCost.toLocaleString()})
                 </button>
               )}
+            </div>
+          )}
+
+          {activeTab === 'muebles' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 'bold' }}>INVENTARIO DE MUEBLES</div>
+              {furnitureInventory.length === 0 ? (
+                <div style={{ fontSize: '9px', color: '#64748b', textAlign: 'center', padding: '10px' }}>No tienes muebles en propiedad.</div>
+              ) : (
+                furnitureInventory.map((item) => {
+                  const catalogData = catalogFurniture.find((c) => c.id === item.catalogId);
+                  if (!catalogData) return null;
+                  return (
+                    <div key={item.uid} className="glass-card">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: '9.5px', fontWeight: 'bold' }}>{catalogData.icon} {catalogData.name}</div>
+                        <button onClick={() => handleSpawnFurniture(item)} style={{ background: '#22c55e', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '8.5px', fontWeight: 'bold', cursor: 'pointer' }}>Colocar</button>
+                      </div>
+
+                      {catalogData.canChangeColor && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                          <span style={{ fontSize: '8.5px', color: '#94a3b8' }}>Color Caja:</span>
+                          <input type="color" value={item.color || '#ffffff'} onChange={(e) => handleUpdateFurnitureColor(item.uid, e.target.value)} style={{ width: '20px', height: '20px', padding: 0, border: 'none', borderRadius: '3px', cursor: 'pointer' }} />
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '4px' }}>
+                        <span style={{ fontSize: '8px', color: '#94a3b8' }}>Venta: <b style={{ color: '#facc15' }}>${catalogData.sellPrice.toLocaleString()}</b></span>
+                        <button onClick={() => handleSellFurniture(item.uid)} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '2px 6px', borderRadius: '3px', fontSize: '8px', cursor: 'pointer' }}>Vender</button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 'bold', marginTop: '6px' }}>TIENDA DE MUEBLES</div>
+              {catalogFurniture.map((f) => (
+                <div key={f.id} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '9.5px', fontWeight: 'bold' }}>{f.icon} {f.name}</div>
+                    <div style={{ fontSize: '8.5px', color: '#38bdf8', marginTop: '1px' }}>$ {f.buyPrice.toLocaleString()}</div>
+                  </div>
+                  <button onClick={() => handleBuyFurniture(f)} style={{ background: '#38bdf8', color: '#000', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '9px', fontWeight: 'bold', cursor: 'pointer' }}>
+                    Comprar
+                  </button>
+                </div>
+              ))}
             </div>
           )}
 
@@ -501,19 +640,32 @@ export const PhoneUI: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'muebles' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {catalogFurniture.map((f) => (
-                <div key={f.id} style={{ background: '#1e293b', padding: '6px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: '9px', fontWeight: 'bold' }}>{f.icon} {f.name}</div>
-                    <div style={{ fontSize: '8px', color: '#94a3b8' }}>{f.component}</div>
-                  </div>
-                  <button onClick={() => { if (money >= f.price) { if (typeof setMoney === 'function') setMoney(money - f.price); triggerNotification(`Comprado ${f.name}`); } else alert('Fondos insuficientes'); }} style={{ background: '#38bdf8', color: '#000', border: 'none', padding: '4px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    $ {f.price.toLocaleString()}
+          {activeTab === 'estado' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '9px', color: '#94a3b8', marginBottom: '4px' }}>❤️ Salud ({currentHealth}%)</div>
+                <div style={{ width: '100%', height: '5px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: `${currentHealth}%`, height: '100%', background: currentHealth > 20 ? '#38bdf8' : '#ef4444' }} />
+                </div>
+              </div>
+              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '9px', color: '#94a3b8', marginBottom: '4px' }}>🍗 Hambre ({playerState?.hunger ?? 100}%)</div>
+                <div style={{ width: '100%', height: '5px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: `${playerState?.hunger ?? 100}%`, height: '100%', background: '#fb923c' }} />
+                </div>
+              </div>
+              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '9px', color: '#94a3b8' }}>📦 Ventas Totales</div>
+                <div style={{ fontSize: '10px', color: '#4ade80', fontWeight: 'bold' }}>{totalSalesCount} unds</div>
+              </div>
+              {isDead && (
+                <div>
+                  {recoveryError && <div style={{ fontSize: '8.5px', color: '#f87171', marginBottom: '4px' }}>{recoveryError}</div>}
+                  <button onClick={handleRecoverHealth} disabled={recovering} style={{ width: '100%', background: '#dc2626', color: '#fff', border: 'none', padding: '6px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}>
+                    {recovering ? 'Procesando...' : '🏥 Curarse'}
                   </button>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -553,7 +705,7 @@ export const PhoneUI: React.FC = () => {
               <div style={{ background: '#1e293b', padding: '8px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
                 <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#f59e0b', marginBottom: '4px' }}>🏦 Sistema Financiero y Créditos</div>
                 <div style={{ fontSize: '9px', color: '#cbd5e1', lineHeight: '1.3' }}>
-                  Sube de nivel para desbloquear préstamos más altos. Las cuotas se cobran automáticamente cada día. ¡Si no pagas, pierdes nivel y se te multa!
+                  Sube de nivel para desbloquear préstamos más altos. Las cuotas se cobran automáticamente cada día.
                 </div>
               </div>
 
@@ -589,6 +741,7 @@ export const PhoneUI: React.FC = () => {
               )}
             </div>
           )}
+
         </div>
 
         <button onClick={close} style={{ background: '#334155', color: '#ffffff', border: 'none', padding: '6px', borderRadius: '6px', fontWeight: 'bold', fontSize: '10px', cursor: 'pointer', marginTop: '6px' }}>

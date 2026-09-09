@@ -7,6 +7,7 @@ interface PhoneStore {
   close: () => void;
 }
 
+
 export const usePhoneStore = create<PhoneStore>((set) => ({
   isOpen: false,
   toggle: () =>

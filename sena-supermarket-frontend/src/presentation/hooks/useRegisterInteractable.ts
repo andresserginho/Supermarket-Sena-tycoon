@@ -5,7 +5,7 @@ import type { IInteractable } from '../../domain/interfaces/IInteractable';
 import { registerInteractable, unregisterInteractable } from '../../infrastructure/interaction/interactionRegistry';
 
 export function useRegisterInteractable<T extends THREE.Object3D>(
-  objectRef: React.RefObject<T>,
+  objectRef: React.RefObject<T | null>,
   interactable: IInteractable,
   label: string
 ) {

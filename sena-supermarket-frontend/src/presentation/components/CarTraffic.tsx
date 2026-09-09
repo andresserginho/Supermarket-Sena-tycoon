@@ -1,13 +1,15 @@
+// src/presentation/components/CarTraffic.tsx
 import React, { useRef, useMemo, Suspense } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { CarModel } from './CarModel';
+import { MODELOS_3D } from '../../application/data/modelosUrls';
 
 const CAR_MODELS = {
-  carro1: '/models/2021_carro1.glb',
-  carro2: '/models/2023_carro2.glb',
-  carro3: '/models/2025_carro3.glb',
+  carro1: MODELOS_3D.carro2021,
+  carro2: MODELOS_3D.carro2023,
+  carro3: MODELOS_3D.carro2025,
 };
 
 Object.values(CAR_MODELS).forEach((path) => useGLTF.preload(path));
@@ -90,7 +92,6 @@ function MovingVehicle({
       ref.current.position.z -= 150;
     }
 
-    // --- DETECCIÓN DE IMPACTO Y EMPUJÓN FÍSICO AL JUGADOR ---
     const dx = camera.position.x - ref.current.position.x;
     const dz = camera.position.z - ref.current.position.z;
     const distance = Math.sqrt(dx * dx + dz * dz);
@@ -99,8 +100,6 @@ function MovingVehicle({
       const now = state.clock.getElapsedTime();
       if (now - lastHitTime.current > 0.8) {
         lastHitTime.current = now;
-
-        // Empuja la cámara directamente hacia la acera más cercana fuera de la carretera
         const pushSide = camera.position.x >= 0 ? 4.5 : -4.5;
         camera.position.x = pushSide;
 
