@@ -1,9 +1,9 @@
-// src/presentation/components/PhoneUI.tsx
 import React, { useState, useEffect } from 'react';
 import { usePhoneStore } from '../../application/store/usePhoneStore';
 import { useSimulationStore } from '../../application/store/useSimulationStore';
 import { recoverHealth } from '../../infrastructure/api/progressApi';
 import { useGameTime } from '../hooks/useGameTime';
+import { MODELOS_3D } from '../../application/data/modelosUrls';
 
 export interface DeliveryItem {
   productId: string;
@@ -109,8 +109,8 @@ const chatPool: ChatMessage[] = [
 ];
 
 const catalogFurniture: FurnitureCatalog[] = [
-  { id: 'mueble_caja', name: 'Caja Registradora', model: '/models/mesa caja registradora.glb', buyPrice: 50000, sellPrice: 40000, icon: '🖥️', canChangeColor: true },
-  { id: 'mueble_estante', name: 'Estante Individual', model: '/models/estante individual.glb', buyPrice: 25000, sellPrice: 20000, icon: '🗄️', canChangeColor: false },
+  { id: 'mueble_caja', name: 'Caja Registradora', model: MODELOS_3D.mesaCajaRegistradora, buyPrice: 50000, sellPrice: 40000, icon: '🖥️', canChangeColor: true },
+  { id: 'mueble_estante', name: 'Estante Individual', model: MODELOS_3D.estanteIndividual, buyPrice: 25000, sellPrice: 20000, icon: '🗄️', canChangeColor: true },
 ];
 
 const catalogProducts: ProductCatalog[] = [
@@ -131,24 +131,22 @@ export const PhoneUI: React.FC = () => {
   const { isOpen, close } = usePhoneStore();
   const store = useSimulationStore() as any;
 
-  const money = store.money ?? 0;
+  const money = store.money !== undefined ? store.money : 50000;
   const totalSalesCount = store.totalSalesCount ?? 0;
   
   const playerState = store.playerState || { level: 1, health: 100, hunger: 100 };
   const inventory = (store.inventory || {}) as Record<string, number>;
-  const setMoney = store.setMoney;
   const addDeliveryBox = store.addDeliveryBox;
-  const deliveryBoxes = store.deliveryBoxes || [];
 
   const furnitureInventory: OwnedFurniture[] = store.furnitureInventory || [];
-  const setFurnitureInventory = store.setFurnitureInventory || ((inv: any) => useSimulationStore.setState({ furnitureInventory: inv } as any));
+  const setFurnitureInventory = (inv: any) => useSimulationStore.setState({ furnitureInventory: inv } as any);
 
   const activeLoan = store.activeLoan || null;
-  const setActiveLoan = store.setActiveLoan || ((loan: any) => useSimulationStore.setState({ activeLoan: loan } as any));
+  const setActiveLoan = (loan: any) => useSimulationStore.setState({ activeLoan: loan } as any);
 
   const { hours, minutes } = useGameTime();
 
-  const [activeTab, setActiveTab] = useState<TabType>('muebles');
+  const [activeTab, setActiveTab] = useState<TabType>('productos');
   const [menuOpen, setMenuOpen] = useState(false);
   const [recovering, setRecovering] = useState(false);
   const [recoveryError, setRecoveryError] = useState('');
@@ -161,6 +159,10 @@ export const PhoneUI: React.FC = () => {
   const [lastTrackedHour, setLastTrackedHour] = useState<number>(hours);
   const [lastProcessedDay, setLastProcessedDay] = useState<number>(-1);
   const [liveTime, setLiveTime] = useState('');
+
+  const updateMoney = (newAmount: number) => {
+    useSimulationStore.setState({ money: Math.max(0, newAmount) } as any);
+  };
 
   const loadNewRandomChats = () => {
     const shuffled = [...chatPool].sort(() => 0.5 - Math.random());
@@ -186,7 +188,7 @@ export const PhoneUI: React.FC = () => {
     if (activeLoan && currentDay !== lastProcessedDay && lastProcessedDay !== -1) {
       setLastProcessedDay(currentDay);
       if (money >= activeLoan.dailyInstallment) {
-        setMoney(money - activeLoan.dailyInstallment);
+        updateMoney(money - activeLoan.dailyInstallment);
         const newRemainingDebt = activeLoan.remainingDebt - activeLoan.dailyInstallment;
         if (newRemainingDebt <= 0) {
           setActiveLoan(null);
@@ -200,10 +202,10 @@ export const PhoneUI: React.FC = () => {
         const newLevel = Math.max(1, currentLevel - 1);
         const penaltyTotal = activeLoan.penaltyFee;
         
-        setMoney(Math.max(0, money - penaltyTotal));
+        updateMoney(money - penaltyTotal);
         useSimulationStore.setState({
           playerState: { ...playerState, level: newLevel }
-        });
+        } as any);
         triggerNotification(`⚠️ ¡MOROSIDAD! No tenías para la cuota. Perdiste 1 Nivel y multa de -$${penaltyTotal.toLocaleString()}`);
       }
     } else if (lastProcessedDay === -1) {
@@ -249,13 +251,12 @@ export const PhoneUI: React.FC = () => {
       return;
     }
 
-    if (typeof setMoney === 'function') setMoney(money - totalCartCost);
+    const newMoney = money - totalCartCost;
 
     const updatedInventory = { ...inventory };
     Object.entries(cart).forEach(([prodId, qty]) => {
       updatedInventory[prodId] = (updatedInventory[prodId] || 0) + qty;
     });
-    useSimulationStore.setState({ inventory: updatedInventory } as any);
 
     const allItems: DeliveryItem[] = [];
     Object.entries(cart).forEach(([prodId, qty]) => {
@@ -286,28 +287,50 @@ export const PhoneUI: React.FC = () => {
 
     if (currentBoxItems.length > 0) boxesToCreate.push(currentBoxItems);
 
-    const existingCount = deliveryBoxes.length;
-    boxesToCreate.forEach((boxItems, idx) => {
-      const globalIdx = existingCount + idx;
-      const col = globalIdx % 4;
-      const isTopStack = Math.floor(globalIdx / 4) % 2 === 1;
+    const currentBoxes = store.deliveryBoxes || [];
+    const totalSpawned = store.totalSpawnedBoxes ?? currentBoxes.length;
 
-      const posX = -1.2 + col * 0.55;
-      const posY = isTopStack ? 0.32 : 0.0;
-      const posZ = -3.8;
+    boxesToCreate.forEach((boxItems, idx) => {
+      const globalIdx = totalSpawned + idx;
+      const maxPerRow = 3;
+      const row = Math.floor(globalIdx / maxPerRow) % 2;
+      const stackLevel = Math.floor(globalIdx / 6);
+      const col = globalIdx % maxPerRow;
+
+      // Posición del andén, fuera de la carretera
+      const posX = -7.4 + (col * 0.55);
+      const posY = 0.081 + (stackLevel * 0.32);
+      const posZ = 0.8 + (row * 0.55);
+
+      const newBox = {
+        id: `box_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
+        items: boxItems,
+        position: [posX, posY, posZ] as [number, number, number],
+        deliveryTimeGameHours: hours,
+      };
 
       if (typeof addDeliveryBox === 'function') {
-        addDeliveryBox({
-          id: `box_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 5)}`,
-          items: boxItems,
-          position: [posX, posY, posZ],
-          deliveryTimeGameHours: hours,
-        });
+        try {
+          addDeliveryBox(boxItems, [posX, posY, posZ]);
+        } catch {
+          addDeliveryBox(newBox);
+        }
+      } else {
+        const existingBoxes = useSimulationStore.getState().deliveryBoxes || [];
+        useSimulationStore.setState({
+          deliveryBoxes: [...existingBoxes, newBox],
+        } as any);
       }
     });
 
+    useSimulationStore.setState({
+      money: newMoney,
+      inventory: updatedInventory,
+      totalSpawnedBoxes: totalSpawned + boxesToCreate.length,
+    } as any);
+
     setCart({});
-    triggerNotification(`📦 Pedido realizado y añadido al inventario.`);
+    triggerNotification(`📦 ¡Pedido realizado! Caja de entrega generada.`);
   };
 
   const handleAnswerChat = (chatId: string, optionIdx: number) => {
@@ -315,7 +338,7 @@ export const PhoneUI: React.FC = () => {
       prev.map((chat) => {
         if (chat.id !== chatId) return chat;
         const selected = chat.options[optionIdx];
-        if (typeof setMoney === 'function') setMoney(money + selected.reward);
+        updateMoney(money + selected.reward);
         triggerNotification(selected.feedback);
         return { ...chat, answered: true, statusText: selected.feedback, isPositive: selected.isCorrect };
       })
@@ -331,7 +354,10 @@ export const PhoneUI: React.FC = () => {
     try {
       setRecovering(true); setRecoveryError('');
       const updatedUser = await recoverHealth('1');
-      useSimulationStore.setState({ playerState: { ...useSimulationStore.getState().playerState, health: updatedUser.health ?? 100 } });
+      const currentState = useSimulationStore.getState() as any;
+      useSimulationStore.setState({
+        playerState: { ...currentState.playerState, health: updatedUser.health ?? 100 }
+      } as any);
     } catch (err: any) {
       setRecoveryError(err.message || 'Error al curarse');
     } finally {
@@ -350,7 +376,7 @@ export const PhoneUI: React.FC = () => {
       return;
     }
 
-    setMoney(money + offer.loanAmount);
+    updateMoney(money + offer.loanAmount);
     setActiveLoan({
       bankName: offer.bankName,
       totalDebt: offer.loanAmount * 1.3,
@@ -385,7 +411,7 @@ export const PhoneUI: React.FC = () => {
       triggerNotification('⚠️ Fondos insuficientes para este mueble.');
       return;
     }
-    if (setMoney) setMoney(money - item.buyPrice);
+    updateMoney(money - item.buyPrice);
 
     const newFurniture: OwnedFurniture = {
       uid: `furn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -402,8 +428,12 @@ export const PhoneUI: React.FC = () => {
     const catalogItem = catalogFurniture.find((c) => c.id === item.catalogId);
     if (!catalogItem) return;
 
-    if (setMoney) setMoney(money + catalogItem.sellPrice);
+    updateMoney(money + catalogItem.sellPrice);
     setFurnitureInventory(furnitureInventory.filter((f) => f.uid !== uid));
+    const currentPlaced = (useSimulationStore.getState() as any).placedFurniture || [];
+    useSimulationStore.setState({
+      placedFurniture: currentPlaced.filter((f: any) => f.uid !== uid),
+    } as any);
     triggerNotification(`💰 Vendido por $${catalogItem.sellPrice.toLocaleString()}`);
   };
 
@@ -422,6 +452,10 @@ export const PhoneUI: React.FC = () => {
     setFurnitureInventory(
       furnitureInventory.map((f) => (f.uid === uid ? { ...f, color: newColor } : f))
     );
+    const currentPlaced = (useSimulationStore.getState() as any).placedFurniture || [];
+    useSimulationStore.setState({
+      placedFurniture: currentPlaced.map((f: any) => (f.uid === uid ? { ...f, color: newColor } : f)),
+    } as any);
   };
 
   if (!isOpen) return null;
@@ -446,8 +480,9 @@ export const PhoneUI: React.FC = () => {
           background: '#090d16', borderRadius: '20px', border: '3px solid #1e293b',
           boxShadow: '0 20px 40px rgba(0,0,0,0.8)', color: '#ffffff',
           fontFamily: 'system-ui, -apple-system, sans-serif', padding: '12px',
-          display: 'flex', flexDirection: 'column', boxSizing: 'border-box', zIndex: 100,
-          userSelect: 'none', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0) scale(1)' : 'translateY(15px) scale(0.98)',
+          display: 'flex', flexDirection: 'column', boxSizing: 'border-box', zIndex: 10000,
+          pointerEvents: 'auto', userSelect: 'none',
+          opacity: visible ? 1 : 0, transform: visible ? 'translateY(0) scale(1)' : 'translateY(15px) scale(0.98)',
           transition: 'opacity 0.2s ease-out, transform 0.2s ease-out',
         }}
       >
@@ -481,10 +516,10 @@ export const PhoneUI: React.FC = () => {
             background: '#0f172a', border: '1px solid #334155', borderRadius: '8px',
             boxShadow: '0 10px 25px rgba(0,0,0,0.9)', zIndex: 200, display: 'flex', flexDirection: 'column', padding: '6px', gap: '4px'
           }}>
-            <button onClick={() => { setActiveTab('muebles'); setMenuOpen(false); }} style={{ background: activeTab === 'muebles' ? '#38bdf8' : 'transparent', color: activeTab === 'muebles' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>🪑 Muebles</button>
+            <button onClick={() => { setActiveTab('estado'); setMenuOpen(false); }} style={{ background: activeTab === 'estado' ? '#38bdf8' : 'transparent', color: activeTab === 'estado' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>❤️ Salud</button>
             <button onClick={() => { setActiveTab('productos'); setMenuOpen(false); }} style={{ background: activeTab === 'productos' ? '#38bdf8' : 'transparent', color: activeTab === 'productos' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>📦 Productos</button>
             <button onClick={() => { setActiveTab('inventario'); setMenuOpen(false); }} style={{ background: activeTab === 'inventario' ? '#38bdf8' : 'transparent', color: activeTab === 'inventario' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>📋 Inventario</button>
-            <button onClick={() => { setActiveTab('estado'); setMenuOpen(false); }} style={{ background: activeTab === 'estado' ? '#38bdf8' : 'transparent', color: activeTab === 'estado' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>❤️ Estado</button>
+            <button onClick={() => { setActiveTab('muebles'); setMenuOpen(false); }} style={{ background: activeTab === 'muebles' ? '#38bdf8' : 'transparent', color: activeTab === 'muebles' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>🪑 Muebles</button>
             <button onClick={() => { setActiveTab('chats'); setMenuOpen(false); }} style={{ background: activeTab === 'chats' ? '#22c55e' : 'transparent', color: activeTab === 'chats' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>💬 Chats</button>
             <button onClick={() => { setActiveTab('banco'); setMenuOpen(false); }} style={{ background: activeTab === 'banco' ? '#f59e0b' : 'transparent', color: activeTab === 'banco' ? '#000' : '#fff', border: 'none', padding: '8px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>🏦 Banco</button>
           </div>
@@ -492,6 +527,35 @@ export const PhoneUI: React.FC = () => {
 
         <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           
+          {activeTab === 'productos' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              {catalogProducts.map((p) => {
+                const qty = cart[p.id] || 0;
+                return (
+                  <div key={p.id} style={{ background: '#1e293b', padding: '6px 8px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '9.5px', fontWeight: 'bold' }}>{p.icon} {p.name}</div>
+                      <div style={{ fontSize: '8.5px', color: '#94a3b8', marginTop: '1px' }}>
+                        $ {p.unitPrice.toLocaleString()} /u {qty > 0 && <span style={{ color: '#4ade80' }}> | Sub: $ {(p.unitPrice * qty).toLocaleString()}</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button onClick={() => updateCart(p.id, -1)} style={{ background: '#334155', color: '#fff', border: 'none', width: '18px', height: '18px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
+                      <span style={{ fontSize: '9.5px', fontWeight: 'bold', minWidth: '14px', textAlign: 'center' }}>{qty}</span>
+                      <button onClick={() => updateCart(p.id, 1)} style={{ background: '#0284c7', color: '#fff', border: 'none', width: '18px', height: '18px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                      <button onClick={() => updateCart(p.id, p.boxUnits)} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '3px 5px', borderRadius: '4px', fontSize: '8px', cursor: 'pointer', fontWeight: 'bold' }}>+Caja</button>
+                    </div>
+                  </div>
+                );
+              })}
+              {totalCartCost > 0 && (
+                <button onClick={handleCheckout} style={{ background: '#22c55e', color: '#fff', border: 'none', padding: '8px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: '4px', boxShadow: '0 4px 10px rgba(34, 197, 94, 0.3)' }}>
+                  Hacer Pedido ($ {totalCartCost.toLocaleString()})
+                </button>
+              )}
+            </div>
+          )}
+
           {activeTab === 'muebles' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 'bold' }}>INVENTARIO DE MUEBLES</div>
@@ -539,64 +603,6 @@ export const PhoneUI: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'estado' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '9px', color: '#94a3b8', marginBottom: '4px' }}>❤️ Salud ({currentHealth}%)</div>
-                <div style={{ width: '100%', height: '5px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ width: `${currentHealth}%`, height: '100%', background: currentHealth > 20 ? '#38bdf8' : '#ef4444' }} />
-                </div>
-              </div>
-              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px' }}>
-                <div style={{ fontSize: '9px', color: '#94a3b8', marginBottom: '4px' }}>🍗 Hambre ({playerState?.hunger ?? 100}%)</div>
-                <div style={{ width: '100%', height: '5px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{ width: `${playerState?.hunger ?? 100}%`, height: '100%', background: '#fb923c' }} />
-                </div>
-              </div>
-              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: '9px', color: '#94a3b8' }}>📦 Ventas Totales</div>
-                <div style={{ fontSize: '10px', color: '#4ade80', fontWeight: 'bold' }}>{totalSalesCount} unds</div>
-              </div>
-              {isDead && (
-                <div>
-                  {recoveryError && <div style={{ fontSize: '8.5px', color: '#f87171', marginBottom: '4px' }}>{recoveryError}</div>}
-                  <button onClick={handleRecoverHealth} disabled={recovering} style={{ width: '100%', background: '#dc2626', color: '#fff', border: 'none', padding: '6px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    {recovering ? 'Procesando...' : '🏥 Curarse'}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'productos' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              {catalogProducts.map((p) => {
-                const qty = cart[p.id] || 0;
-                return (
-                  <div key={p.id} style={{ background: '#1e293b', padding: '6px 8px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: '9.5px', fontWeight: 'bold' }}>{p.icon} {p.name}</div>
-                      <div style={{ fontSize: '8.5px', color: '#94a3b8', marginTop: '1px' }}>
-                        $ {p.unitPrice.toLocaleString()} /u {qty > 0 && <span style={{ color: '#4ade80' }}> | Sub: $ {(p.unitPrice * qty).toLocaleString()}</span>}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <button onClick={() => updateCart(p.id, -1)} style={{ background: '#334155', color: '#fff', border: 'none', width: '18px', height: '18px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
-                      <span style={{ fontSize: '9.5px', fontWeight: 'bold', minWidth: '14px', textAlign: 'center' }}>{qty}</span>
-                      <button onClick={() => updateCart(p.id, 1)} style={{ background: '#0284c7', color: '#fff', border: 'none', width: '18px', height: '18px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
-                      <button onClick={() => updateCart(p.id, p.boxUnits)} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '3px 5px', borderRadius: '4px', fontSize: '8px', cursor: 'pointer', fontWeight: 'bold' }}>+Caja</button>
-                    </div>
-                  </div>
-                );
-              })}
-              {totalCartCost > 0 && (
-                <button onClick={handleCheckout} style={{ background: '#22c55e', color: '#fff', border: 'none', padding: '8px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: '4px', boxShadow: '0 4px 10px rgba(34, 197, 94, 0.3)' }}>
-                  Hacer Pedido ($ {totalCartCost.toLocaleString()})
-                </button>
-              )}
-            </div>
-          )}
-
           {activeTab === 'inventario' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               {Object.keys(inventory || {}).length === 0 ? (
@@ -630,6 +636,35 @@ export const PhoneUI: React.FC = () => {
                     </div>
                   );
                 })
+              )}
+            </div>
+          )}
+
+          {activeTab === 'estado' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '9px', color: '#94a3b8', marginBottom: '4px' }}>❤️ Salud ({currentHealth}%)</div>
+                <div style={{ width: '100%', height: '5px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: `${currentHealth}%`, height: '100%', background: currentHealth > 20 ? '#38bdf8' : '#ef4444' }} />
+                </div>
+              </div>
+              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '9px', color: '#94a3b8', marginBottom: '4px' }}>🍗 Hambre ({playerState?.hunger ?? 100}%)</div>
+                <div style={{ width: '100%', height: '5px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: `${playerState?.hunger ?? 100}%`, height: '100%', background: '#fb923c' }} />
+                </div>
+              </div>
+              <div style={{ background: 'rgba(30, 41, 59, 0.7)', padding: '8px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '9px', color: '#94a3b8' }}>📦 Ventas Totales</div>
+                <div style={{ fontSize: '10px', color: '#4ade80', fontWeight: 'bold' }}>{totalSalesCount} unds</div>
+              </div>
+              {isDead && (
+                <div>
+                  {recoveryError && <div style={{ fontSize: '8.5px', color: '#f87171', marginBottom: '4px' }}>{recoveryError}</div>}
+                  <button onClick={handleRecoverHealth} disabled={recovering} style={{ width: '100%', background: '#dc2626', color: '#fff', border: 'none', padding: '6px', borderRadius: '6px', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer' }}>
+                    {recovering ? 'Procesando...' : '🏥 Curarse'}
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -670,7 +705,7 @@ export const PhoneUI: React.FC = () => {
               <div style={{ background: '#1e293b', padding: '8px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
                 <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#f59e0b', marginBottom: '4px' }}>🏦 Sistema Financiero y Créditos</div>
                 <div style={{ fontSize: '9px', color: '#cbd5e1', lineHeight: '1.3' }}>
-                  Sube de nivel para desbloquear préstamos más altos. Las cuotas se cobran automáticamente cada día. ¡Si no pagas, pierdes nivel y se te multa!
+                  Sube de nivel para desbloquear préstamos más altos. Las cuotas se cobran automáticamente cada día.
                 </div>
               </div>
 

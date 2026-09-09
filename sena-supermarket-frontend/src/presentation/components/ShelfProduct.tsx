@@ -5,6 +5,7 @@ import type { Product } from '../../domain/entities/Product';
 import { ProductInteractable } from '../../domain/entities/ProductInteractable';
 import { useRegisterInteractable } from '../hooks/useRegisterInteractable';
 import { useSimulationStore } from '../../application/store/useSimulationStore';
+import { MODELOS_3D } from '../../application/data/modelosUrls';
 
 interface ShelfProductProps {
   product: Product;
@@ -17,7 +18,7 @@ export const ShelfProduct: React.FC<ShelfProductProps> = ({ product, position })
   const addToCart = useSimulationStore((s) => s.addToCart);
 
   // Cargamos el modelo del estante individual o el producto si aplica
-  const { scene } = useGLTF('/models/estante individual.glb');
+  const { scene } = useGLTF(MODELOS_3D.estanteIndividual);
 
   const interactable = useMemo(
     () =>

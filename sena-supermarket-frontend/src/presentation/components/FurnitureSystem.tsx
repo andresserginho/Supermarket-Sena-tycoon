@@ -1,10 +1,13 @@
 // src/presentation/components/FurnitureSystem.tsx
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
+import { useXRInputSourceState } from '@react-three/xr';
 import * as THREE from 'three';
 import { useSimulationStore } from '../../application/store/useSimulationStore';
-import { worldColliders } from '../utils/colliders';
+import { supermarketFloorColliders, worldColliders } from '../utils/colliders';
+import { MODELOS_3D } from '../../application/data/modelosUrls';
+import { SUPERMARKET_BOUNDS } from '../../application/data/supermarketBounds';
 
 interface PlacedFurniture {
   uid: string;
@@ -16,20 +19,33 @@ interface PlacedFurniture {
 }
 
 const getModelConfig = (modelPath: string) => {
-  if (modelPath.includes('mesa caja registradora')) {
-    return { scale: 0.4, yOffset: -1.0 };
+  if (modelPath.includes('mesa%20caja%20registradora') || modelPath.includes('mesa caja registradora')) {
+    return { desiredHeight: 1.05, yOffset: 0 };
   }
-  return { scale: 1.0, yOffset: 0 };
+  return { desiredHeight: 1.35, yOffset: 0 };
 };
 
-const SpawningFurniture: React.FC<{ holdingData: any, onPlace: (pos: [number, number, number]) => void, onCancel: () => void }> = ({ holdingData, onPlace, onCancel }) => {
+const getModelScale = (scene: THREE.Object3D, desiredHeight: number) => {
+  const bounds = new THREE.Box3().setFromObject(scene);
+  const sourceHeight = bounds.getSize(new THREE.Vector3()).y;
+  return sourceHeight > 0.001 ? desiredHeight / sourceHeight : 1;
+};
+
+const FLOOR_Y = 0.081;
+const STORE_BOUNDS = SUPERMARKET_BOUNDS;
+
+const SpawningFurniture: React.FC<{ holdingData: any, onPlace: (pos: [number, number, number], rotation: [number, number, number]) => void, onCancel: () => void }> = ({ holdingData, onPlace, onCancel }) => {
   const gltf = useGLTF(holdingData.model) as any;
   const scene = gltf.scene;
-  const clone = scene.clone();
+  const clone = useMemo(() => scene.clone(true), [scene]);
   
   const groupRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
+  const rightController = useXRInputSourceState('controller', 'right');
   const [isValidPos, setIsValidPos] = useState(true);
+  const isValidPosRef = useRef(true);
+  const rotationY = useRef(0);
+  const rotationCooldown = useRef(0);
 
   useEffect(() => {
     if (holdingData.color) {
@@ -51,38 +67,77 @@ const SpawningFurniture: React.FC<{ holdingData: any, onPlace: (pos: [number, nu
     
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const target = new THREE.Vector3();
-    raycaster.ray.intersectPlane(plane, target);
+    const hit = raycaster.ray.intersectPlane(plane, target);
+
+    if (!hit) {
+      target.copy(camera.position).add(cameraDir.multiplyScalar(2));
+      target.y = 0;
+    }
 
     if (target) {
+      rotationCooldown.current -= 1 / 60;
+      const stick = rightController?.gamepad?.['xr-standard-thumbstick'];
+      if (stick && Math.abs(stick.xAxis ?? 0) > 0.65 && rotationCooldown.current <= 0) {
+        rotationY.current += Math.sign(stick.xAxis ?? 0) * Math.PI / 8;
+        rotationCooldown.current = 0.25;
+      }
       const distance = camera.position.distanceTo(target);
       if (distance > 5) {
         target.copy(camera.position).add(cameraDir.multiplyScalar(5));
         target.y = 0;
       }
       
-      groupRef.current.position.copy(target);
-      groupRef.current.rotation.y = camera.rotation.y;
+      groupRef.current.position.set(target.x, 0, target.z);
+      groupRef.current.rotation.y = rotationY.current;
 
+      groupRef.current.updateMatrixWorld(true);
       const furnitureBox = new THREE.Box3().setFromObject(groupRef.current);
-      let collision = false;
+      const supportY = supermarketFloorColliders
+        .filter((collider) =>
+          collider.max.x > furnitureBox.min.x && collider.min.x < furnitureBox.max.x &&
+          collider.max.z > furnitureBox.min.z && collider.min.z < furnitureBox.max.z
+        )
+        .reduce((highest, collider) => Math.max(highest, collider.max.y), FLOOR_Y);
+      groupRef.current.position.y += supportY - furnitureBox.min.y + 0.001;
+      groupRef.current.updateMatrixWorld(true);
+      const placedBox = new THREE.Box3().setFromObject(groupRef.current);
+      const insideStore =
+        placedBox.min.x >= STORE_BOUNDS.minX && placedBox.max.x <= STORE_BOUNDS.maxX &&
+        placedBox.min.z >= STORE_BOUNDS.minZ && placedBox.max.z <= STORE_BOUNDS.maxZ;
+      let collision = !insideStore;
       for (const collider of worldColliders) {
-        if (furnitureBox.intersectsBox(collider)) {
+        const isFloor = supermarketFloorColliders.includes(collider) || collider.max.y <= FLOOR_Y + 0.01;
+        if (insideStore && !isFloor && placedBox.intersectsBox(collider)) {
           collision = true;
           break;
         }
       }
-      setIsValidPos(!collision);
+      const nextIsValid = !collision;
+      if (isValidPosRef.current !== nextIsValid) {
+        isValidPosRef.current = nextIsValid;
+        setIsValidPos(nextIsValid);
+      }
     }
   });
 
   useEffect(() => {
     const handleMouseClick = (e: MouseEvent) => {
       if (e.button === 0 && isValidPos && groupRef.current) {
-        onPlace([groupRef.current.position.x, 0, groupRef.current.position.z]);
+        onPlace(
+          [groupRef.current.position.x, groupRef.current.position.y, groupRef.current.position.z],
+          [0, groupRef.current.rotation.y, 0],
+        );
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'q') onCancel();
+      if (e.key.toLowerCase() === 'r') rotationY.current += Math.PI / 8;
+      if (e.key === 'Enter' && isValidPos && groupRef.current) {
+        onPlace(
+          [groupRef.current.position.x, groupRef.current.position.y, groupRef.current.position.z],
+          [0, groupRef.current.rotation.y, 0],
+        );
+      }
     };
 
     window.addEventListener('mousedown', handleMouseClick);
@@ -94,14 +149,11 @@ const SpawningFurniture: React.FC<{ holdingData: any, onPlace: (pos: [number, nu
   }, [isValidPos, onPlace, onCancel]);
 
   const config = getModelConfig(holdingData.model);
+  const modelScale = useMemo(() => getModelScale(clone, config.desiredHeight), [clone, config.desiredHeight]);
 
   return (
     <group ref={groupRef}>
-      <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.8, 32]} />
-        <meshBasicMaterial color={isValidPos ? "#4ade80" : "#ef4444"} transparent opacity={0.4} />
-      </mesh>
-      <group scale={config.scale} position={[0, config.yOffset, 0]}>
+      <group scale={modelScale} position={[0, config.yOffset, 0]}>
         <primitive object={clone} />
       </group>
     </group>
@@ -111,7 +163,10 @@ const SpawningFurniture: React.FC<{ holdingData: any, onPlace: (pos: [number, nu
 const PlacedItem: React.FC<{ data: PlacedFurniture, onPickUp: (uid: string) => void }> = ({ data, onPickUp }) => {
   const gltf = useGLTF(data.model) as any;
   const scene = gltf.scene;
-  const clone = scene.clone();
+  const clone = useMemo(() => scene.clone(true), [scene]);
+  const groupRef = useRef<THREE.Group>(null);
+  const heldProduct = useSimulationStore((state) => state.heldProduct);
+  const dropProduct = useSimulationStore((state) => state.dropProduct);
   
   useEffect(() => {
     if (data.color) {
@@ -123,7 +178,9 @@ const PlacedItem: React.FC<{ data: PlacedFurniture, onPickUp: (uid: string) => v
       });
     }
     
-    const box = new THREE.Box3().setFromObject(clone);
+    if (!groupRef.current) return;
+    groupRef.current.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(groupRef.current);
     worldColliders.push(box);
     return () => {
       const idx = worldColliders.indexOf(box);
@@ -132,19 +189,26 @@ const PlacedItem: React.FC<{ data: PlacedFurniture, onPickUp: (uid: string) => v
   }, [clone, data.color, data.position]);
 
   const config = getModelConfig(data.model);
+  const modelScale = useMemo(() => getModelScale(clone, config.desiredHeight), [clone, config.desiredHeight]);
 
   return (
-    <group 
+    <group
+      ref={groupRef}
       position={data.position} 
       rotation={data.rotation}
       onClick={(e) => {
         e.stopPropagation();
-        onPickUp(data.uid);
+        if (heldProduct) {
+          const point = e.point;
+          dropProduct([point.x, point.y + 0.1, point.z], point.y + 0.1);
+        } else {
+          onPickUp(data.uid);
+        }
       }}
       onPointerOver={() => document.body.style.cursor = 'pointer'}
       onPointerOut={() => document.body.style.cursor = 'auto'}
     >
-      <group scale={config.scale} position={[0, config.yOffset, 0]}>
+      <group scale={modelScale} position={[0, config.yOffset, 0]}>
         <primitive object={clone} />
       </group>
     </group>
@@ -160,7 +224,7 @@ export const FurnitureSystem: React.FC = () => {
   const setFurnitureInventory = store.setFurnitureInventory || ((arr: any) => useSimulationStore.setState({ furnitureInventory: arr } as any));
   const furnitureInventory = store.furnitureInventory || [];
 
-  const handlePlace = (pos: [number, number, number]) => {
+  const handlePlace = (pos: [number, number, number], rotation: [number, number, number]) => {
     if (!holdingFurniture) return;
     
     const newPlaced: PlacedFurniture = {
@@ -169,11 +233,9 @@ export const FurnitureSystem: React.FC = () => {
       model: holdingFurniture.model,
       color: holdingFurniture.color,
       position: pos,
-      rotation: [0, 0, 0]
+      rotation
     };
 
-    const newInv = furnitureInventory.filter((f: any) => f.uid !== holdingFurniture.uid);
-    setFurnitureInventory(newInv);
     setPlacedFurniture([...placedFurniture, newPlaced]);
     
     useSimulationStore.setState({ holdingFurniture: null } as any);
@@ -187,8 +249,10 @@ export const FurnitureSystem: React.FC = () => {
     const item = placedFurniture.find(f => f.uid === uid);
     if (!item) return;
 
-    const invItem = { uid: item.uid, catalogId: item.catalogId, color: item.color };
-    setFurnitureInventory([...furnitureInventory, invItem]);
+    const alreadyOwned = furnitureInventory.some((f: any) => f.uid === item.uid);
+    if (!alreadyOwned) {
+      setFurnitureInventory([...furnitureInventory, { uid: item.uid, catalogId: item.catalogId, color: item.color }]);
+    }
     setPlacedFurniture(placedFurniture.filter(f => f.uid !== uid));
     
     alert("Mueble devuelto al inventario del celular.");
@@ -213,5 +277,5 @@ export const FurnitureSystem: React.FC = () => {
 
 export default FurnitureSystem;
 
-useGLTF.preload('/models/mesa caja registradora.glb');
-useGLTF.preload('/models/estante individual.glb');
+useGLTF.preload(MODELOS_3D.mesaCajaRegistradora);
+useGLTF.preload(MODELOS_3D.estanteIndividual);

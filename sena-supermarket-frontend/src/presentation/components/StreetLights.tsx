@@ -14,7 +14,6 @@ const STREET_LIGHTS_CONFIG: Omit<StreetLightProps, 'isNight'>[] = [
   // Acera Derecha (Lado opuesto de la calle)
   { position: [6, 0, -50], height: 3.5, rotationY: Math.PI },
   { position: [6, 0, -25], height: 3.5, rotationY: Math.PI },
-  { position: [6, 0, 0],   height: 3.5, rotationY: Math.PI },
   { position: [6, 0, 25],  height: 3.5, rotationY: Math.PI },
   { position: [6, 0, 50],  height: 3.5, rotationY: Math.PI },
 ];
