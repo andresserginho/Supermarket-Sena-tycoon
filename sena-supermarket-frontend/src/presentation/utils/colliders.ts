@@ -3,6 +3,8 @@ import * as THREE from 'three';
 // Almacena las cajas delimitadoras de colisión extraídas de las mallas reales
 export const worldColliders: THREE.Box3[] = [];
 export const supermarketFloorColliders: THREE.Box3[] = [];
+export const shelfColliders: THREE.Box3[] = [];
+export const npcObstacleColliders: THREE.Box3[] = [];
 
 export function addColliderFromMesh(mesh: THREE.Object3D) {
   const box = new THREE.Box3().setFromObject(mesh);
@@ -19,6 +21,15 @@ export function addGroundCollider(mesh: THREE.Object3D, thickness = 0.04) {
 
 export function clearColliders() {
   worldColliders.length = 0;
+  shelfColliders.length = 0;
+  npcObstacleColliders.length = 0;
+}
+
+export function addShelfCollider(object: THREE.Object3D) {
+  const box = new THREE.Box3().setFromObject(object);
+  if (box.isEmpty()) return box;
+  shelfColliders.push(box);
+  return box;
 }
 
 export function addBoxCollider(min: [number, number, number], max: [number, number, number]) {

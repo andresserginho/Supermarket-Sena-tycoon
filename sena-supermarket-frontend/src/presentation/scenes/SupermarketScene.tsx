@@ -5,7 +5,6 @@ import { Canvas } from '@react-three/fiber';
 import { SupermarketEnvironment } from '../components/SupermarketEnvironment';
 import { FirstPersonController } from '../components/FirstPersonController';
 import { Crosshair } from '../components/Crosshair';
-import { PhoneUI } from '../components/PhoneUI';
 import { HeldPhone3D } from '../components/HeldPhone3D';
 import { DayNightCycle } from '../components/DayNightCycle';
 import { StreetLights } from '../components/StreetLights';
@@ -162,7 +161,6 @@ export const SupermarketScene: React.FC = () => {
       </Canvas>
 
       <Crosshair />
-      <PhoneUI />
 
       {nightDecision === 'pending' && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 12000, display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,0.72)' }}>

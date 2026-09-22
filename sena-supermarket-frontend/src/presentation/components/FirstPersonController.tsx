@@ -32,6 +32,10 @@ function fireKeyPress(code: string) {
   window.dispatchEvent(new KeyboardEvent('keydown', { code }));
 }
 
+function fireKeyRelease(code: string) {
+  window.dispatchEvent(new KeyboardEvent('keyup', { code }));
+}
+
 interface FirstPersonControllerProps {
   xrOriginRef?: React.RefObject<THREE.Group | null>;
 }
@@ -105,6 +109,7 @@ export const FirstPersonController: React.FC<FirstPersonControllerProps> = ({ xr
     const trigger = rightController?.gamepad?.['xr-standard-trigger'] ?? leftController?.gamepad?.['xr-standard-trigger'];
     const triggerPressed = trigger?.state === 'pressed';
     if (triggerPressed && !triggerWasPressed.current) fireKeyPress('KeyE');
+    if (!triggerPressed && triggerWasPressed.current) fireKeyRelease('KeyE');
     triggerWasPressed.current = triggerPressed;
 
     // 2. Menú (Abrir Celular)
@@ -119,6 +124,7 @@ export const FirstPersonController: React.FC<FirstPersonControllerProps> = ({ xr
     const grip = rightController?.gamepad?.['xr-standard-squeeze'] ?? leftController?.gamepad?.['xr-standard-squeeze'];
     const gripPressed = grip?.state === 'pressed';
     if (gripPressed && !gripWasPressed.current) fireKeyPress('KeyG'); // <-- Listo para tu sistema de cajas
+    if (!gripPressed && gripWasPressed.current) fireKeyRelease('KeyG');
     gripWasPressed.current = gripPressed;
 
     // 4. Botones A/X (Confirmar) y B/Y (Cancelar)
@@ -135,17 +141,22 @@ export const FirstPersonController: React.FC<FirstPersonControllerProps> = ({ xr
     if (!xrOriginRef?.current) return;
 
     // 5. Movimiento con Joystick Izquierdo
-    const leftStick = leftController?.gamepad?.['xr-standard-thumbstick'];
-    const moveX = leftStick?.xAxis ?? 0;
-    const moveZ = leftStick?.yAxis ?? 0;
+    const leftGamepad = leftController?.gamepad as any;
+    const leftStick = leftGamepad?.['xr-standard-thumbstick'];
+    const moveX = leftStick?.xAxis ?? leftGamepad?.axes?.[2] ?? leftGamepad?.axes?.[0] ?? 0;
+    const moveZ = leftStick?.yAxis ?? leftGamepad?.axes?.[3] ?? leftGamepad?.axes?.[1] ?? 0;
 
     if (Math.abs(moveX) > 0.15 || Math.abs(moveZ) > 0.15) {
       const forward = new THREE.Vector3();
       camera.getWorldDirection(forward);
       forward.y = 0;
+      if (forward.lengthSq() < 0.001) {
+        forward.set(0, 0, -1).applyEuler(xrOriginRef.current.rotation);
+        forward.y = 0;
+      }
       forward.normalize();
 
-      const side = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+      const side = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
       const direction = new THREE.Vector3();
       direction.addScaledVector(forward, -moveZ);
