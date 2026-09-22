@@ -106,6 +106,36 @@ const chatPool: ChatMessage[] = [
       { text: 'Ahí hay traperos, si quiere límpielo usted.', isCorrect: false, feedback: 'Queja formal registrada (-$5.000).', reward: -5000 },
     ],
   },
+  {
+    id: 'chat_proveedor',
+    npcName: 'Proveedor Andino',
+    avatar: '🚚',
+    message: 'El camión llega en diez minutos. ¿Confirmas espacio para descargar la mercancía?',
+    options: [
+      { text: 'Sí, despejamos el andén y recibimos el pedido.', isCorrect: true, feedback: 'Entrega coordinada. El proveedor mejoró tu reputación.', reward: 3500 },
+      { text: 'Descárguelo en la calle, yo no tengo tiempo.', isCorrect: false, feedback: 'El pedido llegó incompleto y generó una penalización.', reward: -4500 },
+    ],
+  },
+  {
+    id: 'chat_jefe',
+    npcName: 'Jefe de Operaciones',
+    avatar: '🧑‍💼',
+    message: 'Las ventas de hoy están por debajo de la meta. ¿Qué acción priorizamos?',
+    options: [
+      { text: 'Organizar los anaqueles y atender primero a la fila.', isCorrect: true, feedback: 'La operación se recuperó y alcanzaste la meta del turno.', reward: 6000 },
+      { text: 'Cerrar una caja y dejar que esperen.', isCorrect: false, feedback: 'Aumentaron las quejas por la espera.', reward: -3500 },
+    ],
+  },
+  {
+    id: 'chat_pedido',
+    npcName: 'Laura (Cliente frecuente)',
+    avatar: '🧑',
+    message: '¿Puedes reservarme cuatro paquetes de arroz para recogerlos esta tarde?',
+    options: [
+      { text: 'Claro, los separo y te confirmo el total.', isCorrect: true, feedback: 'La reserva se convirtió en una venta segura.', reward: 4500 },
+      { text: 'No hacemos reservas, busca en otro supermercado.', isCorrect: false, feedback: 'Perdiste una clienta frecuente.', reward: -2500 },
+    ],
+  },
 ];
 
 const catalogFurniture: FurnitureCatalog[] = [
@@ -127,7 +157,11 @@ const bankOffers: BankLoanOffer[] = [
   { id: 'bank_3', bankName: 'MegaBanco VIP (Nivel 3+)', minLevel: 3, loanAmount: 3000000, dailyInstallment: 240000, penaltyFee: 350000, icon: '💎' },
 ];
 
-export const PhoneUI: React.FC = () => {
+interface PhoneUIProps {
+  embedded?: boolean;
+}
+
+export const PhoneUI: React.FC<PhoneUIProps> = ({ embedded = false }) => {
   const { isOpen, close } = usePhoneStore();
   const store = useSimulationStore() as any;
 
@@ -476,13 +510,14 @@ export const PhoneUI: React.FC = () => {
         onMouseUp={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         style={{
-          position: 'absolute', bottom: 20, right: 20, width: '310px', height: '500px',
+          position: embedded ? 'relative' : 'absolute', bottom: embedded ? undefined : 20, right: embedded ? undefined : 20,
+          width: embedded ? '100%' : '310px', height: embedded ? '100%' : '500px', minHeight: 0,
           background: '#090d16', borderRadius: '20px', border: '3px solid #1e293b',
           boxShadow: '0 20px 40px rgba(0,0,0,0.8)', color: '#ffffff',
-          fontFamily: 'system-ui, -apple-system, sans-serif', padding: '12px',
+          fontFamily: 'system-ui, -apple-system, sans-serif', fontWeight: 700, padding: '12px',
           display: 'flex', flexDirection: 'column', boxSizing: 'border-box', zIndex: 10000,
           pointerEvents: 'auto', userSelect: 'none',
-          opacity: visible ? 1 : 0, transform: visible ? 'translateY(0) scale(1)' : 'translateY(15px) scale(0.98)',
+          opacity: embedded || visible ? 1 : 0, transform: embedded || visible ? 'translateY(0) scale(1)' : 'translateY(15px) scale(0.98)',
           transition: 'opacity 0.2s ease-out, transform 0.2s ease-out',
         }}
       >
@@ -525,7 +560,7 @@ export const PhoneUI: React.FC = () => {
           </div>
         )}
 
-        <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div className="no-scrollbar" style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '3px' }}>
           
           {activeTab === 'productos' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>

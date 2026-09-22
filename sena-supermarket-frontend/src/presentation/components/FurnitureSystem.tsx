@@ -5,7 +5,7 @@ import { useGLTF } from '@react-three/drei';
 import { useXRInputSourceState } from '@react-three/xr';
 import * as THREE from 'three';
 import { useSimulationStore } from '../../application/store/useSimulationStore';
-import { supermarketFloorColliders, worldColliders } from '../utils/colliders';
+import { addShelfCollider, supermarketFloorColliders, shelfColliders, worldColliders } from '../utils/colliders';
 import { MODELOS_3D } from '../../application/data/modelosUrls';
 import { SUPERMARKET_BOUNDS } from '../../application/data/supermarketBounds';
 
@@ -182,9 +182,15 @@ const PlacedItem: React.FC<{ data: PlacedFurniture, onPickUp: (uid: string) => v
     groupRef.current.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(groupRef.current);
     worldColliders.push(box);
+    const isShelf = data.catalogId.toLowerCase().includes('estante');
+    const shelfBox = isShelf ? addShelfCollider(groupRef.current) : null;
     return () => {
       const idx = worldColliders.indexOf(box);
       if(idx > -1) worldColliders.splice(idx, 1);
+      if (shelfBox) {
+        const shelfIndex = shelfColliders.indexOf(shelfBox);
+        if (shelfIndex > -1) shelfColliders.splice(shelfIndex, 1);
+      }
     }
   }, [clone, data.color, data.position]);
 

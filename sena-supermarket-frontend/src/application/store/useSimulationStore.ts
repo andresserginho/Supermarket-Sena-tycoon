@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Product } from '../../domain/entities/Product';
 import { isInsideSupermarket } from '../data/supermarketBounds';
+import { shelfColliders } from '../../presentation/utils/colliders';
 
 export interface SimulationPlayerState {
   level: number;
@@ -98,6 +99,14 @@ function findFreeDropPosition(position: [number, number, number], boxes: Deliver
     [position[0], position[1], position[2] - 0.35],
   ];
   return candidates.find((candidate) => !isOccupied(candidate, boxes, products)) || candidates[1];
+}
+
+function isValidShelfDrop(position: [number, number, number]) {
+  return shelfColliders.some((shelf) => {
+    const horizontalMatch = position[0] >= shelf.min.x - 0.12 && position[0] <= shelf.max.x + 0.12 &&
+      position[2] >= shelf.min.z - 0.12 && position[2] <= shelf.max.z + 0.12;
+    return horizontalMatch && position[1] >= shelf.min.y - 0.3 && position[1] <= shelf.max.y + 1.5;
+  });
 }
 
 export const useSimulationStore = create<SimulationState>()(
@@ -216,6 +225,7 @@ export const useSimulationStore = create<SimulationState>()(
         if (!heldProduct) return;
 
         if (!isInsideSupermarket(dropPosition[0], dropPosition[2])) return;
+        if (shelfColliders.length > 0 && !isValidShelfDrop(dropPosition)) return;
 
         const landingPosition = findFreeDropPosition(
           [dropPosition[0], Math.max(0.19, dropPosition[1]), dropPosition[2]],

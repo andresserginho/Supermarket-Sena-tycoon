@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
-import { addObjectColliders, supermarketFloorColliders, worldColliders } from '../utils/colliders';
+import { addObjectColliders, addShelfCollider, npcObstacleColliders, supermarketFloorColliders, shelfColliders, worldColliders } from '../utils/colliders';
 import { MODELOS_3D } from '../../application/data/modelosUrls';
 import { setSupermarketBounds } from '../../application/data/supermarketBounds';
 
@@ -48,12 +48,13 @@ function StructurePart({
 
   useEffect(() => {
     if (!groupRef.current) return;
-    groupRef.current.updateMatrixWorld(true);
-    const colliders = isWall ? addObjectColliders(groupRef.current) : [];
+    const structureGroup = groupRef.current;
+    structureGroup.updateMatrixWorld(true);
+    const colliders = isWall ? addObjectColliders(structureGroup) : [];
     const floorColliders: THREE.Box3[] = [];
 
     if (modelUrl === MODEL_PATHS.supermarket) {
-      const modelBounds = new THREE.Box3().setFromObject(groupRef.current);
+      const modelBounds = new THREE.Box3().setFromObject(structureGroup);
       setSupermarketBounds(
         modelBounds.min.x + 1.2,
         modelBounds.max.x - 1.2,
@@ -61,9 +62,14 @@ function StructurePart({
         modelBounds.max.z - 1.2,
       );
 
-      groupRef.current.traverse((child) => {
+      structureGroup.traverse((child) => {
         if (!(child as THREE.Mesh).isMesh) return;
+        const nodeName = child.name.toLowerCase();
+        if (nodeName.includes('shelf') || nodeName.includes('estante') || nodeName.includes('estanter')) {
+          addShelfCollider(child);
+        }
         const box = new THREE.Box3().setFromObject(child);
+        if (!box.isEmpty() && box.max.y > 0.3) npcObstacleColliders.push(box);
         if (box.isEmpty() || box.max.y > 1.5) return;
         const floorBox = box.clone();
         floorBox.min.y = floorBox.max.y - 0.06;
@@ -83,6 +89,15 @@ function StructurePart({
         if (worldIndex >= 0) worldColliders.splice(worldIndex, 1);
         const floorIndex = supermarketFloorColliders.indexOf(collider);
         if (floorIndex >= 0) supermarketFloorColliders.splice(floorIndex, 1);
+      });
+      structureGroup.traverse((child) => {
+        const nodeName = child.name.toLowerCase();
+        const obstacleBox = npcObstacleColliders.find((candidate) => candidate.equals(new THREE.Box3().setFromObject(child)));
+        if (obstacleBox) npcObstacleColliders.splice(npcObstacleColliders.indexOf(obstacleBox), 1);
+        if (nodeName.includes('shelf') || nodeName.includes('estante') || nodeName.includes('estanter')) {
+          const shelfBox = shelfColliders.find((candidate) => candidate.equals(new THREE.Box3().setFromObject(child)));
+          if (shelfBox) shelfColliders.splice(shelfColliders.indexOf(shelfBox), 1);
+        }
       });
     };
   }, [isWall, modelUrl, cloned]);
@@ -110,6 +125,15 @@ export const SupermarketStructure: React.FC<SupermarketStructureProps> = ({
       <pointLight position={[9, 4, 16]} intensity={18} distance={14} color="#fff4d6" />
       <pointLight position={[9, 3, 10]} intensity={12} distance={10} color="#dcecff" />
       <pointLight position={[9, 3, 22]} intensity={12} distance={10} color="#dcecff" />
+      <ambientLight intensity={0.7} color="#fff4dc" />
+      <pointLight position={[5, 4, 4]} intensity={9} distance={9} color="#fff1cf" />
+      <pointLight position={[13, 4, 4]} intensity={9} distance={9} color="#fff1cf" />
+      <pointLight position={[5, 4, 12]} intensity={9} distance={9} color="#fff1cf" />
+      <pointLight position={[13, 4, 12]} intensity={9} distance={9} color="#fff1cf" />
+      <pointLight position={[5, 4, 20]} intensity={9} distance={9} color="#fff1cf" />
+      <pointLight position={[13, 4, 20]} intensity={9} distance={9} color="#fff1cf" />
+      <pointLight position={[5, 4, 28]} intensity={9} distance={9} color="#fff1cf" />
+      <pointLight position={[13, 4, 28]} intensity={9} distance={9} color="#fff1cf" />
 
       {/* Estructura provisional desactivada mientras se ajusta SUPERMERCADO.glb. */}
       {false && Array.from({ length: unlockedZones }).map((_, i) => {

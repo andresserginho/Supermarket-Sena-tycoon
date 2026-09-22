@@ -42,9 +42,18 @@ const getProductColor = (id: string) => {
   return '#a8a29e';
 };
 
-export const DeliveryBoxItem: React.FC<DeliveryBoxItemProps> = ({ box, onPickUpBox, onPickUpProduct, isHandFull }) => {
-  if (!box || !box.items) return null;
+const MAX_PICKUP_DISTANCE = 3;
 
+function isWithinPickupDistance(camera: THREE.Camera, point: THREE.Vector3 | undefined, object: THREE.Object3D | null) {
+  if (!object) return false;
+  const objectPosition = new THREE.Vector3();
+  object.getWorldPosition(objectPosition);
+  return camera.position.distanceTo(objectPosition) <= MAX_PICKUP_DISTANCE ||
+    (point ? camera.position.distanceTo(point) <= MAX_PICKUP_DISTANCE : false);
+}
+
+export const DeliveryBoxItem: React.FC<DeliveryBoxItemProps> = ({ box, onPickUpBox, onPickUpProduct, isHandFull }) => {
+  const { camera } = useThree();
   const store = useSimulationStore() as any;
   const removeDeliveryBox = store.removeDeliveryBox;
 
@@ -61,6 +70,8 @@ export const DeliveryBoxItem: React.FC<DeliveryBoxItemProps> = ({ box, onPickUpB
   const boxDepth = 0.46;
   const t = 0.025; // Espesor del cartón
   const floorY = 0.081;
+
+  if (!box || !box.items) return null;
 
   // Actualiza los ítems locales cuando la caja cambie en el store
   useEffect(() => {
@@ -163,6 +174,7 @@ export const DeliveryBoxItem: React.FC<DeliveryBoxItemProps> = ({ box, onPickUpB
   const handleSidePickUp = (e: any) => {
     e.stopPropagation();
     if (isHandFull) return;
+    if (!isWithinPickupDistance(camera, e.point, groupRef.current)) return;
 
     const currentPos: [number, number, number] = groupRef.current
       ? [groupRef.current.position.x, groupRef.current.position.y, groupRef.current.position.z]
@@ -175,6 +187,7 @@ export const DeliveryBoxItem: React.FC<DeliveryBoxItemProps> = ({ box, onPickUpB
   const handleProductClick = (e: any, productId: string) => {
     e.stopPropagation();
     if (isHandFull) return;
+    if (!isWithinPickupDistance(camera, e.point, groupRef.current)) return;
 
     const newItems = localItems.map((item) => {
       if (item.productId === productId && item.quantity > 0) {
@@ -306,6 +319,7 @@ export const DeliveryBoxItem: React.FC<DeliveryBoxItemProps> = ({ box, onPickUpB
 
 const LooseProduct: React.FC<{ item: LooseProduct }> = ({ item }) => {
   const pickUpLooseProduct = useSimulationStore((state) => state.pickUpLooseProduct);
+  const { camera } = useThree();
   const meshRef = useRef<THREE.Mesh>(null);
   const velocityY = useRef(0);
   const isGrounded = useRef(false);
@@ -354,6 +368,7 @@ const LooseProduct: React.FC<{ item: LooseProduct }> = ({ item }) => {
       castShadow
       onPointerDown={(event) => {
         event.stopPropagation();
+        if (!event.point || camera.position.distanceTo(event.point) > MAX_PICKUP_DISTANCE) return;
         pickUpLooseProduct(item);
       }}
       onPointerOver={(event) => {
@@ -448,6 +463,7 @@ export const DeliveryBoxes: React.FC = () => {
   const heldProduct = store.heldProduct;
   const dropBox = store.dropBox || store.placeHeldBox;
   const dropProduct = store.dropProduct || store.dropHeldItem;
+  const pointerStartedWithHeldObject = useRef(false);
 
   useEffect(() => {
     const currentBoxes = useSimulationStore.getState().deliveryBoxes || [];
@@ -470,8 +486,15 @@ export const DeliveryBoxes: React.FC = () => {
 
   // Acción de soltar con la Tecla 'E'
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'KeyE' || e.key.toLowerCase() === 'e') {
+    const handlePointerDown = () => {
+      pointerStartedWithHeldObject.current = Boolean(
+        useSimulationStore.getState().heldBox || useSimulationStore.getState().heldProduct
+      );
+    };
+    const releaseHeldObject = (e: KeyboardEvent | PointerEvent) => {
+      const keyReleased = e instanceof KeyboardEvent && (e.code === 'KeyE' || e.code === 'KeyG' || e.key.toLowerCase() === 'e');
+      const pointerReleased = e instanceof PointerEvent && e.button === 0 && pointerStartedWithHeldObject.current;
+      if (keyReleased || pointerReleased) {
         if ((heldBox || heldProduct) && (typeof dropBox === 'function' || typeof dropProduct === 'function')) {
           const dir = new THREE.Vector3();
           camera.getWorldDirection(dir);
@@ -488,10 +511,17 @@ export const DeliveryBoxes: React.FC = () => {
           if (heldProduct && typeof dropProduct === 'function') dropProduct(dropPos);
         }
       }
+      if (pointerReleased) pointerStartedWithHeldObject.current = false;
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('keyup', releaseHeldObject);
+    window.addEventListener('pointerup', releaseHeldObject);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('keyup', releaseHeldObject);
+      window.removeEventListener('pointerup', releaseHeldObject);
+    };
   }, [heldBox, heldProduct, dropBox, dropProduct, camera]);
 
   return (
